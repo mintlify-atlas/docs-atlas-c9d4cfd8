@@ -1,0 +1,75 @@
+---
+title: Introduction
+description: Automate the Thaumcraft 4 research minigame in Minecraft 1.7.10 with pixel-based recognition and intelligent puzzle solving
+---
+
+# Thaumcraft 4 Research Bot
+
+A screenshot-based bot that automates the Thaumcraft 4 research minigame for Minecraft 1.7.10, designed to replace manual research helpers and websites.
+
+## Overview
+
+This bot uses computer vision to recognize research puzzles directly from your game screen, solves them using an efficient algorithm, and automatically places aspects using mouse control. Built specifically for the [Gregtech: New Horizons](https://github.com/GTNewHorizons/GT-New-Horizons-Modpack) modpack with TC Research Tweaks addon support.
+
+<Note>
+The bot has been tested to work on all research puzzles in GTNH and generates solutions optimized for minimal aspect cost.
+</Note>
+
+## Key features
+
+<CardGroup cols={2}>
+  <Card title="Pixel-based recognition" icon="eye">
+    Recognizes puzzle boards directly from screenshots using custom resource pack markers
+  </Card>
+  <Card title="Universal solver" icon="brain">
+    Fast, efficient algorithm that works on all research puzzles with optimized aspect usage
+  </Card>
+  <Card title="Automatic mouse control" icon="mouse-pointer">
+    Quickly inputs puzzle solutions and can craft undiscovered aspects automatically
+  </Card>
+  <Card title="Configurable costs" icon="sliders">
+    Customize aspect costs to prioritize abundant materials in your inventory
+  </Card>
+</CardGroup>
+
+## How it works
+
+1. **Screenshot capture** - Takes a screenshot of your game window with the research table open
+2. **Puzzle parsing** - Identifies the hex grid, existing aspects, and empty spaces using pixel detection
+3. **Solution generation** - Runs an optimized solver to find the cheapest path connecting all aspects
+4. **Automatic placement** - Uses mouse control to place aspects according to the solution
+
+<Info>
+The bot generates solutions that prefer simple aspects (like primal aspects) to minimize material costs.
+</Info>
+
+## Test modes
+
+The bot includes multiple testing modes for development and validation:
+
+- **Test mode** - Uses `debug_input.png` instead of taking screenshots, skips mouse actions
+- **Test-all mode** - Runs solver on all puzzles in `test_inputs/` folder for benchmarking
+
+## Quick links
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Get started with uv and prerequisites
+  </Card>
+  <Card title="Quick start" icon="rocket" href="/quick-start">
+    Solve your first research puzzle
+  </Card>
+</CardGroup>
+
+## Platform support
+
+<Warning>
+Linux is not currently supported. The bot requires Windows for screenshot capture and mouse input functionality.
+</Warning>
+
+## Performance notes
+
+- Optimized for speed in Python with efficient pathfinding algorithms
+- Handles most puzzles in seconds
+- Large boards with 7+ given aspects may take longer (potentially minutes for 9+ aspects)
+- Solutions are cached to improve performance on repeated patterns

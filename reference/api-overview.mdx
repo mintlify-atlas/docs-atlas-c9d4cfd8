@@ -1,0 +1,180 @@
+---
+title: API Overview
+description: Overview of the main modules, entry points, and command-line interface for the Thaumcraft 4 Research Bot
+---
+
+## Entry Point
+
+The bot is executed through the main entry point in `src/__main__.py`:
+
+```python
+if __name__ == "__main__":
+    main()
+```
+
+### Main Function
+
+The `main()` function accepts optional command-line arguments to control execution mode:
+
+```python
+def main():
+    # MODE can be: None (normal), "test", or "test_all"
+    config = get_global_config()
+    if TEST_ALL_MODE:
+        test_all_samples(config)
+    else:
+        normal_mode(config)
+```
+
+## Command-Line Interface
+
+The bot supports three execution modes via command-line arguments:
+
+<CodeGroup>
+```bash Normal Mode (Default)
+uv run main
+```
+
+```bash Test Mode
+uv run main test
+```
+
+```bash Test All Mode
+uv run main test_all
+```
+</CodeGroup>
+
+### Execution Modes
+
+<ParamField path="MODE" type="string" default="None">
+  The execution mode determined by `sys.argv[1]`
+  
+  - **None** (default): Normal mode - takes screenshots, solves puzzles, and performs mouse actions
+  - **"test"**: Test mode - reads from `debug_input.png` instead of taking screenshots, skips mouse actions
+  - **"test_all"**: Test all mode - runs solver on all images in `test_inputs/` folder for benchmarking
+</ParamField>
+
+## Core Workflow
+
+### Normal Mode
+
+The `normal_mode(config: Config)` function implements the main bot loop:
+
+1. **Setup & Screenshot**: Captures the game window or loads test image
+2. **Inventory Analysis**: Detects available aspects in inventory panels
+3. **Board Parsing**: Extracts the hexagonal grid from the screenshot
+4. **Solution Generation**: Solves the research puzzle using the ring solver algorithm
+5. **Aspect Placement**: Automatically places aspects via mouse control
+6. **Wait for Next**: Waits for user input (Enter or global hotkey) to process next board
+
+```python
+def normal_mode(config: Config):
+    inventory_aspects: list[OnscreenAspect] | None = None
+    while True:
+        image, window_base_coords = setup_image(TEST_MODE, inventory_aspects is not None)
+        pixels = image.load()
+        
+        if inventory_aspects is None:
+            inventory_aspects, needs_image_retake = find_and_create_inventory_aspects(
+                image, pixels, window_base_coords
+            )
+        
+        grid = generate_hexgrid_from_image(image, pixels)
+        solved = generate_solution_from_hexgrid(grid)
+        
+        place_all_aspects(window_base_coords, inventory_aspects, solved)
+        action = wait_for_action(config.next_board_hotkey)
+```
+
+### Test All Mode
+
+The `test_all_samples(config: Config)` function benchmarks the solver:
+
+```python
+def test_all_samples(config: Config):
+    test_files = list(Path("./test_inputs").glob("board_*.png"))
+    
+    for test_file in test_files:
+        image = PIL.Image.open(test_file)
+        grid = generate_hexgrid_from_image(image, pixels)
+        solved = generate_solution_from_hexgrid(grid)
+        print(f"Solved with score {solved.calculate_cost()} in {solve_time_ms:.2f}ms")
+```
+
+## Key Functions
+
+### Image Processing
+
+<ResponseField name="setup_image" type="function">
+  ```python
+  def setup_image(test_mode=True, skip_focus=False) -> Tuple[Image, Tuple[int, int]]
+  ```
+  
+  Takes a screenshot of the game window or loads test image. Returns the image and window base coordinates.
+</ResponseField>
+
+<ResponseField name="generate_hexgrid_from_image" type="function">
+  ```python
+  def generate_hexgrid_from_image(image: Image, pixels) -> HexGrid
+  ```
+  
+  Parses the screenshot to extract the hexagonal puzzle grid structure.
+</ResponseField>
+
+### Solving
+
+<ResponseField name="generate_solution_from_hexgrid" type="function">
+  ```python
+  def generate_solution_from_hexgrid(grid: HexGrid) -> SolvingHexGrid
+  ```
+  
+  Generates an optimal solution for the puzzle using the ring solver algorithm. Returns a `SolvingHexGrid` with applied paths.
+</ResponseField>
+
+### Mouse Control
+
+<ResponseField name="place_all_aspects" type="function">
+  ```python
+  def place_all_aspects(
+      window_base_coords: Coordinate,
+      inventory_aspects: list[OnscreenAspect],
+      solved: SolvingHexGrid
+  )
+  ```
+  
+  Automatically places all aspects from the solution using mouse drag operations.
+</ResponseField>
+
+### User Input
+
+<ResponseField name="wait_for_action" type="function">
+  ```python
+  def wait_for_action(hotkey: str | None) -> str
+  ```
+  
+  Waits for user input via console (Enter='next', 'r'='retry') or global hotkey. Returns the action string.
+</ResponseField>
+
+## Type Aliases
+
+The codebase uses several type aliases for clarity:
+
+```python
+type Coordinate = Tuple[int, int]
+type OnscreenAspect = Tuple[Tuple[int, int, int, int], str]  # (bbox, aspect_name)
+```
+
+## Configuration
+
+The bot uses a `Config` dataclass loaded from `config.toml`:
+
+```python
+@dataclass
+class Config:
+    game_window_title: str
+    next_board_hotkey: str | None
+    aspect_cost_overrides: dict[str, int]
+    disabled_aspects: list[str]
+```
+
+See the [Config](/reference/modules#config) section for more details.

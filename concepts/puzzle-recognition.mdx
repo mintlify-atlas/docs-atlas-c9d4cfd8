@@ -1,0 +1,267 @@
+---
+title: Puzzle Recognition
+description: How pixel-based recognition works to identify aspects, grid positions, and connections from screenshots
+---
+
+## Overview
+
+The puzzle recognition system uses pixel-perfect RGB color matching to convert a screenshot into a structured `HexGrid` representation. This process is critical for reliable automation across different Minecraft GUI scales and screen resolutions.
+
+## Color-Based Aspect Detection
+
+### Aspect Color Mapping
+
+Each Thaumcraft aspect has a unique RGB color signature defined in `colors.py`:
+
+```python
+aspect_colors = {
+    "ordo": "D5D4EC",
+    "terra": "56C000",
+    "aqua": "3CD4FC",
+    "ignis": "FF5A01",
+    "aer": "FFFF7E",
+    "perditio": "404040",
+    # ... 65+ total aspects
+}
+
+# Convert to RGB tuples for pixel matching
+aspect_to_rgb_map = {
+    name: hex_to_rgb(hex_code) for name, hex_code in aspect_colors.items()
+}
+
+rgb_to_aspect_map = {
+    (r, g, b): name for name, (r, g, b) in aspect_to_rgb_map.items()
+}
+```
+
+The `rgb_to_aspect()` function performs instant O(1) lookups:
+
+```python
+def rgb_to_aspect(rgb_color):
+    return rgb_to_aspect_map.get(rgb_color)  # Returns aspect name or None
+```
+
+<Note>
+  The color matching is **exact** - it requires pixel-perfect RGB values. This ensures no false positives but requires careful calibration for texture packs or visual mods.
+</Note>
+
+## Frame Detection
+
+The first step is locating the research puzzle boundary within the screenshot.
+
+### Fast NumPy-Based Algorithm
+
+The `find_frame_fast()` function uses vectorized operations for performance:
+
+```python
+def find_frame_fast(image, target_color):
+    # Convert PIL image to numpy array
+    img_array = np.array(image)
+    
+    # Create boolean mask for matching pixels
+    r_match = img_array[:,:,0] == target_color[0]
+    g_match = img_array[:,:,1] == target_color[1]
+    b_match = img_array[:,:,2] == target_color[2]
+    mask = r_match & g_match & b_match
+
+    # Find bounding box
+    y_indices, x_indices = np.where(mask)
+    min_x, max_x = np.min(x_indices), np.max(x_indices)
+    min_y, max_y = np.min(y_indices), np.max(y_indices)
+    
+    return (min_x, min_y, max_x, max_y)
+```
+
+**Validation checks:**
+- Frame must be at least 10x10 pixels
+- All four corners must match the target color
+- Falls back to slow pixel-by-pixel scan if validation fails
+
+### Fallback Algorithm
+
+The `find_frame_slow()` method scans each pixel and looks for consecutive runs of the frame color:
+
+```python
+def has_consecutive_pixels(image, pixels, x, y, dx, dy):
+    target_color = pixels[x, y]
+    for i in range(10):
+        nx, ny = x + i * dx, y + i * dy
+        if not (0 <= nx < image.width and 0 <= ny < image.height) or pixels[nx, ny] != target_color:
+            return False
+    return True
+```
+
+This ensures we find the **inner** boundary of potentially thick frames.
+
+## Aspect Recognition via Flood Fill
+
+Once the frame is located, `find_aspects_in_frame()` scans for aspect pixels:
+
+```python
+def find_aspects_in_frame(frame, pixels) -> List[Tuple[Tuple[int, int, int, int], str]]:
+    min_x, min_y, max_x, max_y = frame
+    visited = set()
+    found_aspects = []
+
+    for y in range(min_y, max_y + 1):
+        for x in range(min_x, max_x + 1):
+            if (x, y) in visited:
+                continue
+            color = pixels[x, y]
+            aspect_name = rgb_to_aspect(color)
+            
+            if aspect_name is not None:
+                # Found a valid aspect pixel - flood fill to get full region
+                bounding_box = flood_fill(pixels, x, y, color, visited, frame_bounds)
+                bb_min_x, bb_min_y, bb_max_x, bb_max_y = bounding_box
+                smaller_side = min(bb_max_x - bb_min_x, bb_max_y - bb_min_y)
+                
+                # Filter out text pixels (smaller than 8px)
+                if smaller_side > 8:
+                    found_aspects.append((bounding_box, aspect_name))
+```
+
+### Flood Fill Algorithm
+
+The flood fill finds all connected pixels of the same color:
+
+```python
+def flood_fill(pixels, x, y, target_color, visited, frame_bounds):
+    min_x_bb, max_x_bb = x, x
+    min_y_bb, max_y_bb = y, y
+    
+    stack = [(x, y)]
+    visited.add((x, y))
+    
+    while stack:
+        cx, cy = stack.pop()
+        # Update bounding box
+        min_x_bb = min(min_x_bb, cx)
+        max_x_bb = max(max_x_bb, cx)
+        min_y_bb = min(min_y_bb, cy)
+        max_y_bb = max(max_y_bb, cy)
+        
+        # Check 4-connected neighbors
+        neighbors = [(cx - 1, cy), (cx + 1, cy), (cx, cy - 1), (cx, cy + 1)]
+        for nx, ny in neighbors:
+            if (nx, ny) in visited or not (min_x <= nx <= max_x and min_y <= ny <= max_y):
+                continue
+            if pixels[nx, ny] == target_color:
+                visited.add((nx, ny))
+                stack.append((nx, ny))
+    
+    return (min_x_bb, min_y_bb, max_x_bb, max_y_bb)
+```
+
+<Tip>
+  The flood fill uses a stack-based approach instead of recursion to avoid stack overflow on large aspect regions.
+</Tip>
+
+## Grid Construction: HexGrid Class
+
+Recognized aspects are mapped to hexagonal grid coordinates in the `HexGrid` class.
+
+### Data Structure
+
+```python
+class HexGrid:
+    # Grid coordinate -> (Aspect name, Screen pixel coordinate)
+    grid: Dict[Tuple[int, int], Tuple[str, Tuple[int, int]]]
+    
+    def set_hex(self, coord: Tuple[int, int], value: str, pixel_coord: Tuple[int, int]):
+        self.grid[coord] = (value, pixel_coord)
+    
+    def get_value(self, coord: Tuple[int, int]) -> Optional[str]:
+        return self.grid[coord][0]
+    
+    def get_pixel_location(self, coord: Tuple[int, int]) -> Tuple[int, int]:
+        return self.grid[coord][1]
+```
+
+**Key features:**
+- Maps logical hex coordinates `(q, r)` to aspect names
+- Preserves original screen pixel locations for later mouse automation
+- Supports "Free" (empty) and "Missing" (out of bounds) special values
+
+### Hexagonal Coordinate System
+
+The bot uses **doubled coordinates** (doubleheight) as explained on [Red Blob Games](https://www.redblobgames.com/grids/hexagons/):
+
+```python
+@staticmethod
+@lru_cache(maxsize=2000)
+def calculate_distance(start: Coordinate, end: Coordinate) -> int:
+    # Doubled coordinates (doubleheight) with y being the height
+    dx = abs(end[0] - start[0])
+    dy = abs(end[1] - start[1])
+    return dx + max(0, (dy - dx) // 2)
+```
+
+<Info>
+  **Why doubled coordinates?** They simplify neighbor calculations and pathfinding on hexagonal grids by using integer arithmetic instead of floating-point.
+</Info>
+
+### Neighbor Detection
+
+Each hex has up to 6 neighbors:
+
+```python
+@lru_cache(maxsize=1000)
+def get_neighbors(self, coord: Tuple[int, int]) -> List[Tuple[int, int]]:
+    q, r = coord
+    neighbor_deltas = [(0, 2), (1, 1), (1, -1), (0, -2), (-1, -1), (-1, 1)]
+    
+    neighbors_with_values = []
+    for dq, dr in neighbor_deltas:
+        neighbor_coord = (q + dq, r + dr)
+        if neighbor_coord in self.grid and self.grid[neighbor_coord][0] != "Missing":
+            neighbors_with_values.append(neighbor_coord)
+    
+    return neighbors_with_values
+```
+
+Neighbor lookups are cached with `@lru_cache` for performance during pathfinding.
+
+## Recognition Pipeline Summary
+
+<Steps>
+  <Step title="Frame Detection">
+    Locate the puzzle boundary using color-based frame detection
+  </Step>
+  <Step title="Aspect Scanning">
+    Scan all pixels within the frame, matching against known aspect colors
+  </Step>
+  <Step title="Flood Fill">
+    Group connected pixels into aspect regions and compute bounding boxes
+  </Step>
+  <Step title="Size Filtering">
+    Filter out small regions (text pixels) keeping only actual aspect icons
+  </Step>
+  <Step title="Grid Mapping">
+    Convert pixel coordinates to hexagonal grid coordinates
+  </Step>
+  <Step title="HexGrid Construction">
+    Build the HexGrid data structure for the solver
+  </Step>
+</Steps>
+
+## Performance Optimizations
+
+| Technique | Benefit |
+|-----------|----------|
+| NumPy vectorization | 10-100x faster frame detection |
+| RGB dictionary lookup | O(1) aspect identification |
+| Flood fill tracking | Each pixel visited exactly once |
+| LRU caching | Neighbor calculations reused |
+| Size filtering | Eliminates false positives from text |
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Solver Algorithm" icon="microchip" href="/concepts/solver-algorithm">
+    See how the HexGrid is used for pathfinding
+  </Card>
+  <Card title="Aspect System" icon="atom" href="/concepts/aspect-system">
+    Learn about aspect transformations and costs
+  </Card>
+</CardGroup>

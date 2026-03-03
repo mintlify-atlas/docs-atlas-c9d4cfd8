@@ -1,0 +1,322 @@
+---
+title: FAQ
+description: Frequently asked questions about the Thaumcraft 4 Research Bot
+---
+
+## General Questions
+
+<AccordionGroup>
+  <Accordion title="The mouse control is going wild! How do I stop it?">
+    **Emergency Stop**: Smash your mouse into the top-left corner of the screen.
+    
+    This triggers the fail-safe built into the mouse control library (pyautogui) which stops all automated mouse movements when the cursor reaches the corner.
+  </Accordion>
+
+  <Accordion title="Why not just pre-compute the best solution for all puzzles?">
+    The "holes" in the puzzle board are randomly placed when creating the Research Notes, so puzzles aren't always the same.
+    
+    Each research topic has:
+    - Fixed given aspects (the starting aspects)
+    - Randomized hole positions on the hex grid
+    
+    This means there are thousands of possible board configurations for each research, making pre-computation impractical.
+  </Accordion>
+
+  <Accordion title="Why Python?">
+    It's the only language I know where I could find decent libraries to take screenshots and perform mouse input.
+    
+    Even these aren't good, though: the screenshot library just fails when the Window is at negative screen coordinates!
+    
+    **Libraries used**:
+    - `pyautogui` - Mouse control and screenshots
+    - `PIL/Pillow` - Image processing
+    - `numpy` - Fast pixel array operations
+  </Accordion>
+
+  <Accordion title="Why isn't this a mod?">
+    That's too cheaty in my opinion.
+    
+    The bot is designed as a quality-of-life tool that:
+    - Still requires you to own the aspects
+    - Still requires you to craft missing aspects
+    - Still requires you to be at a research table
+    
+    It just automates the tedious clicking part of the minigame.
+  </Accordion>
+</AccordionGroup>
+
+## Technical Questions
+
+<AccordionGroup>
+  <Accordion title="What coordinate system does the hex grid use?">
+    The bot uses the **"doubled coordinates" (doubleheight)** system with y being the height axis.
+    
+    From `HexGrid.calculate_distance`:
+    ```python
+    dx = abs(end[0] - start[0])
+    dy = abs(end[1] - start[1])
+    return dx + max(0, (dy - dx) // 2)
+    ```
+    
+    Neighbor deltas are:
+    ```python
+    [(0, 2), (1, 1), (1, -1), (0, -2), (-1, -1), (-1, 1)]
+    ```
+    
+    **Reference**: [Red Blob Games - Hexagonal Grids](https://www.redblobgames.com/grids/hexagons/#distances)
+  </Accordion>
+
+  <Accordion title="How does the solver algorithm work?">
+    The `RingSolver` uses a **backtracking search** algorithm:
+    
+    1. Start with the given aspects on the board
+    2. For each unconnected aspect:
+       - Find all possible paths to connect it
+       - Sort paths by aspect cost
+       - Try the cheapest path first
+    3. If a path fails, backtrack and try the next alternative
+    4. When all aspects are connected, record the solution
+    5. Continue searching to find better (lower cost) solutions
+    6. Return the best solution found
+    
+    **Optimization**: The solver prunes branches early if the current cost + minimum possible remaining cost exceeds the best known solution.
+  </Accordion>
+
+  <Accordion title="What are the performance characteristics?">
+    From the README:
+    
+    **Fast cases** (most puzzles):
+    - Parse time: ~10-50ms
+    - Solve time: ~50-500ms
+    
+    **Slow cases** (large boards with 7+ given aspects):
+    - Solve time: Several seconds to minutes
+    - The algorithm doesn't scale well with many initial aspects
+    
+    **Optimizations used**:
+    - `@lru_cache` on distance calculations and neighbor lookups
+    - Aspect graph neighbors sorted by cost (cheapest first)
+    - Early pruning based on cost bounds
+    - Cached connected position sets
+  </Accordion>
+
+  <Accordion title="What aspect costs are used?">
+    By default, aspect costs are calculated recursively:
+    
+    - **Primal aspects** cost 1 (aer, aqua, ordo, terra, ignis, perditio)
+    - **Compound aspects** cost the sum of their parents
+    
+    **Examples**:
+    ```python
+    aspect_costs["ignis"] = 1       # Primal
+    aspect_costs["aqua"] = 1        # Primal
+    aspect_costs["victus"] = 2      # aqua + terra
+    aspect_costs["herba"] = 3       # terra + victus
+    aspect_costs["instrumentum"] = 5  # Calculated recursively
+    ```
+    
+    You can override these in `config.toml`:
+    ```toml
+    [aspect-costs]
+    instrumentum = 1  # Treat as cheap if you have many
+    ```
+  </Accordion>
+
+  <Accordion title="How are screenshots processed?">
+    The image processing pipeline:
+    
+    1. **Screenshot**: Capture game window using `pyautogui`
+    2. **Frame Detection**: Find colored frames using numpy masks
+       - Board frame: RGB(150, 123, 123)
+       - Left inventory: RGB(100, 123, 123)
+       - Right inventory: RGB(200, 123, 123)
+    3. **Aspect Detection**: Flood-fill to find aspect icons by color
+    4. **Hex Grid Extraction**: Group by X coordinate, sort by Y, detect holes
+    5. **Grid Building**: Map to doubled-height hex coordinates
+    
+    **Resource Pack Required**: The bot requires a custom resource pack with specific frame colors.
+  </Accordion>
+
+  <Accordion title="Can I customize aspect costs?">
+    Yes! Edit the `config.toml` file:
+    
+    ```toml
+    [aspect-costs]
+    instrumentum = 1
+    fabrico = 2
+    machina = 3
+    ```
+    
+    This is useful if:
+    - You have large quantities of certain aspects
+    - You want to prioritize using aspects you're trying to deplete
+    - You want solutions to avoid expensive/rare aspects
+    
+    **Note**: The bot doesn't detect how many aspects you own - it relies on these static costs.
+  </Accordion>
+
+  <Accordion title="What are the 'Missing' and 'Free' values?">
+    Special grid values used during board parsing:
+    
+    - **"Free"**: An empty hex space where aspects can be placed
+    - **"Missing"**: A hole in the board where no hex exists
+    
+    From the code:
+    ```python
+    if neighbor_coord in self.grid and self.grid[neighbor_coord][0] != "Missing":
+        # Valid neighbor
+    
+    if self.get_value(neighbor) == "Free":
+        # Can pathfind through this space
+    ```
+    
+    These are filtered out when counting unconnected positions.
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="The bot can't find my game window">
+    Check the `game-window-title` setting in `config.toml`:
+    
+    ```toml
+    [general]
+    game-window-title = "GT: New Horizons"
+    ```
+    
+    This should match the beginning of your game window title. Common values:
+    - `"GT: New Horizons"` (default)
+    - `"Minecraft 1.7.10"`
+    - Your custom window title
+  </Accordion>
+
+  <Accordion title="Mouse movements are too fast/slow">
+    Currently there's no way to adjust the mouse speed from config.
+    
+    From the README:
+    > Currently no way to reduce the mouse interaction speed. The current speed works consistently for me, but might break on laggier machines.
+    
+    The delays are hardcoded in `mouseactions.py`:
+    ```python
+    sleep(0.03)  # Between mouse actions
+    ```
+    
+    You would need to modify the source code to change these values.
+  </Accordion>
+
+  <Accordion title="The board parsing failed">
+    Common causes:
+    
+    1. **Resource pack not installed**: You need the custom resource pack
+    2. **GUI size incompatible**: The bot isn't well tested on all GUI sizes
+    3. **Tooltip covering board**: Hide NEI or move large tooltips
+    4. **Board not clean**: Remove all manually placed aspects before running
+    
+    **Debug output**: Check `debug_input.png` and `debug_render.png` to see what the bot detected.
+  </Accordion>
+
+  <Accordion title="Missing aspects from inventory error">
+    The bot detects which aspects are visible in your inventory panels.
+    
+    If aspects are missing:
+    1. The bot will list them and ask if you want to auto-craft them
+    2. Type `y` to enable automatic crafting mode
+    3. The bot will drag-combine aspects to craft the missing ones
+    
+    **Experimental feature**: Auto-crafting is still experimental and may fail.
+    
+    You can also craft the missing aspects manually before running the bot.
+  </Accordion>
+
+  <Accordion title="Solver is taking forever on large boards">
+    From the README:
+    > Solver algorithm currently doesn't scale well with many (7+) given aspects on large boards. It gets quite slow. On the largest boards (9+ given aspects) it may currently take *minutes* to calculate.
+    
+    **Workarounds**:
+    - Be patient on large puzzles
+    - Use `test` mode to avoid re-parsing the same board
+    - Consider placing some aspects manually to reduce the search space
+    
+    The solver will eventually find a solution - it just takes time.
+  </Accordion>
+
+  <Accordion title="Linux support?">
+    Not currently supported.
+    
+    From the README:
+    > **No Linux Support** - I don't want to deal with finding a universal way of taking screenshots and performing mouse input
+    
+    The bot uses Windows-specific libraries:
+    - `msvcrt` for console input
+    - `pyautogui` with Windows window handling
+    
+    A Linux port would require replacing these with cross-platform alternatives.
+  </Accordion>
+</AccordionGroup>
+
+## Usage Questions
+
+<AccordionGroup>
+  <Accordion title="How do I run the bot in test mode?">
+    Test mode reads from `debug_input.png` instead of taking a screenshot:
+    
+    ```bash
+    uv run main test
+    ```
+    
+    This is useful for:
+    - Testing the solver without mouse movements
+    - Debugging board parsing issues
+    - Running the solver multiple times on the same board
+    
+    The bot will generate `debug_render.png` showing the detected board and solution.
+  </Accordion>
+
+  <Accordion title="How do I benchmark solver performance?">
+    Use test-all mode to run the solver on all saved test inputs:
+    
+    ```bash
+    uv run main test_all
+    ```
+    
+    This will:
+    - Find all `test_inputs/board_*.png` files
+    - Parse and solve each one
+    - Print timing and cost statistics
+    
+    **Output**:
+    ```
+    Solved with score 156 in 12.34+234.56ms
+    ```
+    (parse time + solve time)
+  </Accordion>
+
+  <Accordion title="What does 'r' do when waiting for next board?">
+    After placing aspects, the bot waits for input:
+    
+    - **Enter**: Process next board (default)
+    - **'r'**: Retry placing aspects on current board
+    - **Global hotkey** (default `Ctrl+R`): Process next board
+    
+    The retry option is useful if:
+    - Mouse movements failed due to lag
+    - You want to see the solution applied again
+    - The game didn't register some clicks
+  </Accordion>
+
+  <Accordion title="Where are cache statistics shown?">
+    At the end of each run, the bot prints LRU cache statistics:
+    
+    ```python
+    print("CacheInfo find cheapest element paths", 
+          _find_cheapest_element_paths_many.cache_info())
+    print("CacheInfo calculate distance", 
+          HexGrid.calculate_distance.cache_info())
+    print("CacheInfo get neighbors", 
+          HexGrid.get_neighbors.cache_info())
+    ```
+    
+    This shows hit/miss ratios for cached functions, useful for performance analysis.
+  </Accordion>
+</AccordionGroup>

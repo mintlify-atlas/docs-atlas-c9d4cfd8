@@ -1,0 +1,454 @@
+---
+title: Core Modules
+description: Documentation of key modules and classes in the Thaumcraft 4 Research Bot
+---
+
+## HexGrid
+
+The `HexGrid` class represents the hexagonal puzzle board and provides pathfinding utilities.
+
+**Source**: `src/utils/grid.py`
+
+### Class Definition
+
+```python
+class HexGrid:
+    grid: Dict[Tuple[int, int], Tuple[str, Tuple[int, int]]]
+```
+
+<ParamField path="grid" type="Dict[Tuple[int, int], Tuple[str, Tuple[int, int]]]">
+  Maps grid coordinates to a tuple of (aspect_name, pixel_coordinate)
+</ParamField>
+
+### Methods
+
+<ResponseField name="set_hex" type="method">
+  ```python
+  def set_hex(self, coord: Tuple[int, int], value: str, pixel_coord: Tuple[int, int]) -> None
+  ```
+  
+  Sets a hexagon cell with an aspect name and its pixel location.
+  
+  <ParamField path="coord" type="Tuple[int, int]">
+    Grid coordinates (x, y) using doubled-height coordinate system
+  </ParamField>
+  <ParamField path="value" type="str">
+    Aspect name (e.g., "ignis", "aqua") or special values "Free", "Missing"
+  </ParamField>
+  <ParamField path="pixel_coord" type="Tuple[int, int]">
+    Screen pixel coordinates for this hexagon
+  </ParamField>
+</ResponseField>
+
+<ResponseField name="get_value" type="method">
+  ```python
+  def get_value(self, coord: Tuple[int, int]) -> Optional[str]
+  ```
+  
+  Returns the aspect name at the given grid coordinate.
+</ResponseField>
+
+<ResponseField name="get_pixel_location" type="method">
+  ```python
+  def get_pixel_location(self, coord: Tuple[int, int]) -> Tuple[int, int]
+  ```
+  
+  Returns the screen pixel coordinates for a grid coordinate.
+</ResponseField>
+
+<ResponseField name="calculate_distance" type="static method">
+  ```python
+  @staticmethod
+  @lru_cache(maxsize=2000)
+  def calculate_distance(start: Coordinate, end: Coordinate) -> int
+  ```
+  
+  Calculates hexagonal distance between two grid coordinates using doubled-height coordinate system.
+  
+  **Cached** with LRU cache for performance.
+</ResponseField>
+
+<ResponseField name="get_neighbors" type="method">
+  ```python
+  @lru_cache(maxsize=1000)
+  def get_neighbors(self, coord: Tuple[int, int]) -> List[Tuple[int, int]]
+  ```
+  
+  Returns valid neighboring coordinates (excludes "Missing" cells).
+  
+  **Cached** for performance. The six possible neighbor deltas are:
+  `[(0, 2), (1, 1), (1, -1), (0, -2), (-1, -1), (-1, 1)]`
+</ResponseField>
+
+<ResponseField name="pathfind_board_shortest" type="method">
+  ```python
+  def pathfind_board_shortest(
+      self, start: Tuple[int, int], end: Tuple[int, int]
+  ) -> List[Tuple[int, int]]
+  ```
+  
+  Finds the shortest path between two coordinates using BFS. Only traverses "Free" cells.
+</ResponseField>
+
+<ResponseField name="pathfind_board_lengths_to_many" type="method">
+  ```python
+  def pathfind_board_lengths_to_many(
+      self, start: Coordinate, ends: List[Coordinate], n_list: List[int]
+  ) -> List[List[List[Coordinate]]]
+  ```
+  
+  Finds all paths of specific lengths from start to multiple end coordinates.
+  
+  Returns paths grouped by destination: `[destination_index][path_variant][step]`
+</ResponseField>
+
+<ResponseField name="pathfind_both_to_many" type="method">
+  ```python
+  def pathfind_both_to_many(
+      self, start: Tuple[int, int], ends: List[Tuple[int, int]]
+  ) -> List[tuple[List[str], List[Coordinate]]]
+  ```
+  
+  Combines aspect pathfinding and board pathfinding. Returns tuples of (aspect_path, board_path).
+</ResponseField>
+
+<ResponseField name="hash_board" type="method">
+  ```python
+  def hash_board(self) -> str
+  ```
+  
+  Creates a filesystem-friendly hash of the board state (ignoring pixel coordinates). Used for saving test inputs.
+</ResponseField>
+
+---
+
+## SolvingHexGrid
+
+Extends `HexGrid` with solution tracking and connectivity analysis.
+
+**Source**: `src/utils/grid.py`
+
+### Class Definition
+
+```python
+class SolvingHexGrid(HexGrid):
+    applied_paths: List[List[Tuple[str, Tuple[int, int]]]]
+    _grid_cache: Dict[Tuple[int, int], str] | None
+    connected_positions_cache: List[set[tuple[int, int]]]
+```
+
+<ParamField path="applied_paths" type="List[List[Tuple[str, Tuple[int, int]]]]">
+  List of solution paths, where each path is a list of (aspect_name, grid_coordinate) tuples
+</ParamField>
+
+<ParamField path="_grid_cache" type="Dict[Tuple[int, int], str] | None">
+  Cached view of the grid after applying all paths
+</ParamField>
+
+<ParamField path="connected_positions_cache" type="List[set[tuple[int, int]]]">
+  Cache of connected position sets for performance
+</ParamField>
+
+### Methods
+
+<ResponseField name="from_hexgrid" type="classmethod">
+  ```python
+  @classmethod
+  def from_hexgrid(cls, hexgrid: HexGrid) -> "SolvingHexGrid"
+  ```
+  
+  Creates a new `SolvingHexGrid` from an existing `HexGrid` by deep copying its grid.
+</ResponseField>
+
+<ResponseField name="apply_path" type="method">
+  ```python
+  def apply_path(self, path: List[Tuple[int, int]], element_path: List[str]) -> None
+  ```
+  
+  Applies a solution path to the grid and invalidates caches.
+</ResponseField>
+
+<ResponseField name="calculate_cost" type="method">
+  ```python
+  def calculate_cost(self) -> int
+  ```
+  
+  Calculates the total cost of the current solution based on aspect costs.
+</ResponseField>
+
+<ResponseField name="are_positions_connected" type="method">
+  ```python
+  def are_positions_connected(self, start: Coordinate, end: Coordinate) -> bool
+  ```
+  
+  Checks if two positions are connected through applied aspect paths.
+</ResponseField>
+
+<ResponseField name="get_unconnected_filled_positions" type="method">
+  ```python
+  def get_unconnected_filled_positions(self, target: Coordinate) -> List[Coordinate]
+  ```
+  
+  Returns all positions with aspects that are not connected to the target position.
+</ResponseField>
+
+<ResponseField name="copy" type="method">
+  ```python
+  def copy(self) -> HexGrid
+  ```
+  
+  Creates a deep copy of the solving grid (for branching during search).
+</ResponseField>
+
+---
+
+## RingSolver
+
+The main puzzle solver using a backtracking search algorithm.
+
+**Source**: `src/solvers/ringsolver.py`
+
+### Class Definition
+
+```python
+class RingSolver:
+    solving: SolvingHexGrid
+    start_aspects: List[Tuple[int, int]]
+    best_solution: SolvingHexGrid
+    best_solution_cost: int
+    all_paths: List[List[Tuple[List[str], List[Tuple[int, int]]]]]
+    path_variation_indices: List[int]
+    next_path_index: int
+    iteration_count: int
+    initial_nodes: List[Tuple[int, int]]
+```
+
+### Constructor
+
+```python
+def __init__(self, solving: SolvingHexGrid, start_aspects: List[Tuple[int, int]])
+```
+
+<ParamField path="solving" type="SolvingHexGrid">
+  The hex grid to solve
+</ParamField>
+
+<ParamField path="start_aspects" type="List[Tuple[int, int]]">
+  Grid coordinates of initially given aspects
+</ParamField>
+
+### Methods
+
+<ResponseField name="solve" type="method">
+  ```python
+  def solve(self) -> SolvingHexGrid
+  ```
+  
+  Main solving method. Runs the backtracking search algorithm until all positions are connected.
+  
+  Returns the best solution found.
+</ResponseField>
+
+<ResponseField name="do_solver_iteration" type="method">
+  ```python
+  def do_solver_iteration(self) -> bool
+  ```
+  
+  Performs one iteration of the solver:
+  1. Finds unconnected nodes
+  2. Attempts to pathfind to them
+  3. Applies the best path found
+  4. Backtracks if no valid path exists
+  
+  Returns `False` when search is complete.
+</ResponseField>
+
+<ResponseField name="alternate_previous_path" type="method">
+  ```python
+  def alternate_previous_path(self) -> bool
+  ```
+  
+  Tries the next path variation for the most recent path. Backtracks if no alternatives exist.
+</ResponseField>
+
+<ResponseField name="report_solution" type="method">
+  ```python
+  def report_solution(self) -> None
+  ```
+  
+  Called when a complete solution is found. Updates `best_solution` if the new solution has lower cost.
+</ResponseField>
+
+### Top-Level Function
+
+```python
+def solve(grid: HexGrid, start_aspects: List[Tuple[int, int]]) -> SolvingHexGrid
+```
+
+Convenience function that creates a `RingSolver` instance and returns the solution.
+
+---
+
+## Config
+
+Configuration management using TOML files.
+
+**Source**: `src/utils/config.py`
+
+### Class Definition
+
+```python
+@dataclass
+class Config:
+    game_window_title: str
+    next_board_hotkey: str | None
+    aspect_cost_overrides: dict[str, int]
+    disabled_aspects: list[str]
+```
+
+<ParamField path="game_window_title" type="str">
+  Title (or beginning of title) of the game window to target
+  
+  **Default**: `"GT: New Horizons"`
+</ParamField>
+
+<ParamField path="next_board_hotkey" type="str | None">
+  Global hotkey to process the next board (alternative to pressing Enter)
+  
+  **Default**: `"ctrl+r"`
+</ParamField>
+
+<ParamField path="aspect_cost_overrides" type="dict[str, int]">
+  Custom aspect costs for solution scoring. Overrides calculated costs.
+  
+  **Example**: `{"instrumentum": 1}` to treat instrumentum as cheap as primal aspects
+</ParamField>
+
+<ParamField path="disabled_aspects" type="list[str]">
+  List of aspect names to ignore (pretend they don't exist)
+  
+  **Example**: `["caelum", "tabernus"]`
+</ParamField>
+
+### Functions
+
+<ResponseField name="get_global_config" type="function">
+  ```python
+  @cache
+  def get_global_config() -> Config
+  ```
+  
+  Loads configuration from `config.toml`. Creates the file with defaults if it doesn't exist.
+  
+  **Cached** to avoid repeated file I/O.
+</ResponseField>
+
+### Configuration File
+
+The bot uses a `config.toml` file in the project root:
+
+```toml
+[general]
+game-window-title = "GT: New Horizons"
+next-board-hotkey = "ctrl+r"
+disabled-aspects = []
+
+[aspect-costs]
+# Example custom costs:
+# instrumentum = 1
+```
+
+---
+
+## Aspects Module
+
+Aspect graph, cost calculation, and pathfinding.
+
+**Source**: `src/utils/aspects.py`
+
+### Data Structures
+
+<ResponseField name="aspect_parents" type="dict[str, Tuple[str, str] | Tuple[None, None]]">
+  ```python
+  aspect_parents: dict[str, Tuple[str, str] | Tuple[None, None]] = {
+      "aer": (None, None),      # Primal aspect
+      "ignis": (None, None),    # Primal aspect
+      "lux": ("aer", "ignis"),  # Compound aspect
+      # ... 70+ aspects total
+  }
+  ```
+  
+  Maps each aspect to its two parent aspects. Primal aspects have `(None, None)`.
+</ResponseField>
+
+<ResponseField name="aspect_costs" type="dict[str, int]">
+  ```python
+  aspect_costs: dict[str, int]
+  ```
+  
+  Calculated costs for each aspect:
+  - Primal aspects cost 1
+  - Compound aspects cost the sum of their parents
+  - Can be overridden via config
+  
+  **Examples**:
+  - `aspect_costs["ignis"] = 1` (primal)
+  - `aspect_costs["lux"] = 2` (ignis + aer)
+  - `aspect_costs["instrumentum"] = 5` (calculated recursively)
+</ResponseField>
+
+<ResponseField name="aspect_graph" type="defaultdict[str, List[str]]">
+  ```python
+  aspect_graph: defaultdict[str, List[str]]
+  ```
+  
+  Adjacency list representation of the aspect graph. Neighbors are sorted by cost (cheapest first).
+</ResponseField>
+
+### Functions
+
+<ResponseField name="find_cheapest_element_paths_many" type="function">
+  ```python
+  def find_cheapest_element_paths_many(
+      start: str, 
+      ends_list: List[str], 
+      n_list: List[int]
+  ) -> List[List[List[str]]]
+  ```
+  
+  Finds the cheapest aspect transformation paths from a start aspect to multiple end aspects.
+  
+  <ParamField path="start" type="str">
+    Starting aspect name
+  </ParamField>
+  <ParamField path="ends_list" type="List[str]">
+    List of target aspect names
+  </ParamField>
+  <ParamField path="n_list" type="List[int]">
+    List of path lengths (one per end aspect)
+  </ParamField>
+  
+  Returns: `[end_index][path_variant][step]` - all minimum-cost paths for each destination.
+  
+  **Cached** with `@lru_cache(maxsize=1000)` for performance.
+</ResponseField>
+
+<ResponseField name="calculate_cost_of_aspect_path" type="function">
+  ```python
+  def calculate_cost_of_aspect_path(path: List[str]) -> int
+  ```
+  
+  Calculates the total cost of an aspect path by summing individual aspect costs.
+</ResponseField>
+
+### Aspect Examples
+
+The bot includes all Thaumcraft 4 aspects plus GTNH custom aspects:
+
+- **Primal Aspects**: aer, aqua, ordo, terra, ignis, perditio
+- **Compound Aspects**: lux, motus, victus, etc.
+- **GTNH Custom**: primordium, vesania, aequalitas, astrum, gloria
+
+<Tip>
+You can disable specific aspects via the `disabled-aspects` config option if your modpack doesn't include them.
+</Tip>

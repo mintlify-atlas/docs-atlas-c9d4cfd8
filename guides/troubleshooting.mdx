@@ -1,0 +1,407 @@
+---
+title: Troubleshooting
+description: Common issues and solutions for the Thaumcraft 4 Research Bot
+---
+
+## Common Issues
+
+This page covers frequent problems and their solutions. If you encounter an issue not listed here, please report it on GitHub.
+
+## Mouse Control Issues
+
+<Accordion title="The mouse control is going wild! How do I stop it?">
+  **Solution:** Move your mouse to the **top-left corner of the screen** immediately for an emergency stop.
+  
+  This triggers a safety mechanism in the mouse control library that halts all actions.
+  
+  **Prevention:**
+  - Don't move your mouse while the bot is placing aspects
+  - Ensure the game window remains focused
+  - Check that the game window is on your main screen
+  - Verify the window isn't at negative screen coordinates
+</Accordion>
+
+<Accordion title="Mouse clicks are happening in the wrong places">
+  **Possible causes:**
+  1. Game window is not on the main screen
+  2. Window was moved/resized after screenshot was taken
+  3. GUI scale in Minecraft doesn't match expected size
+  4. Window is at negative screen coordinates
+  
+  **Solutions:**
+  - Move the game window to your **primary monitor**
+  - Let the bot maximize the window automatically (don't resize manually)
+  - Keep the window maximized during operation
+  - Check `debug_render.png` to see if aspect positions were detected correctly
+  
+  <Note>
+    The bot moves the window to (10, 10) and maximizes it in `src/__main__.py:172-176`.
+  </Note>
+</Accordion>
+
+<Accordion title="Aspect placement is too fast and missing hexagons">
+  **Issue:** Mouse moves too quickly for your machine's performance.
+  
+  **Current limitation:** There's no configuration option to adjust mouse speed.
+  
+  **Workaround:**
+  - Reduce Minecraft lag (lower graphics settings, close background apps)
+  - Modify timing delays in `src/utils/mouseactions.py:10-22`:
+  
+  ```python
+  def drag_mouse_from_to(window_base_coords, start, end):
+      # Increase these sleep values for slower movement
+      sleep(0.03)  # Try 0.05 or 0.1
+      gui.mouseDown()
+      sleep(0.03)  # Try 0.05 or 0.1
+      gui.moveTo(end_x, end_y)
+      sleep(0.03)  # Try 0.05 or 0.1
+  ```
+</Accordion>
+
+## Screenshot and Detection Issues
+
+<Accordion title="Screenshot fails when window is at negative coordinates">
+  **Known limitation:** The screenshot library fails if the window is positioned at negative screen coordinates.
+  
+  **Solution:**
+  - Move the game window to positive coordinates (preferably on the main screen)
+  - Let the bot reposition the window automatically (it moves it to 10, 10)
+  - Ensure the game window is on your primary monitor
+  
+  <Warning>
+    This is a library limitation mentioned in the README. Multi-monitor setups with negative coordinates may have issues.
+  </Warning>
+</Accordion>
+
+<Accordion title="Aspects are not being detected on the board">
+  **Most common cause:** Resource pack not installed or not activated.
+  
+  **Solutions:**
+  1. Verify the resource pack is installed:
+     - Copy `minecraft_resource_pack/` to `.minecraft/resourcepacks/`
+     - Activate "Thaumcraft Research Bot Textures" in Minecraft
+  
+  2. Check the `debug_render.png` file:
+     - It should show detected aspect positions
+     - If aspects are missing, the resource pack may not be active
+  
+  3. Ensure tooltips aren't covering the board:
+     - Hide NEI (press `O` in GTNH)
+     - Move your mouse away from the puzzle board before starting
+  
+  4. Check board detection:
+     - The puzzle should only have initially given aspects (no manually placed ones)
+     - Empty hexagons must be clearly visible
+</Accordion>
+
+<Accordion title="'debug_input.png' is blank or corrupted">
+  **Causes:**
+  - Game window is minimized
+  - Window is on a secondary monitor not being captured
+  - Screenshot permissions issue
+  
+  **Solutions:**
+  - Ensure game window is maximized and visible
+  - Move window to primary monitor
+  - Run the terminal/IDE as administrator (Windows permissions)
+  - Check that the game window matches `game-window-title` in config
+</Accordion>
+
+## Configuration Issues
+
+<Accordion title="Game window not found">
+  **Error message:**
+  ```
+  Exception: Wrong number of game windows: 0
+  ```
+  
+  **Solution:**
+  1. Check your game window title (look at the window's title bar)
+  2. Update `config.toml`:
+     ```toml
+     [general]
+     game-window-title = "Your Exact Window Title"
+     ```
+  3. Remember: The setting matches the **beginning** of the title, not the whole thing
+  
+  **Example:** If your window is titled "GT: New Horizons - Minecraft 1.7.10", use:
+  ```toml
+  game-window-title = "GT: New Horizons"
+  ```
+</Accordion>
+
+<Accordion title="Multiple game windows found">
+  **Error message:**
+  ```
+  Exception: Wrong number of game windows: 2
+  ```
+  
+  **Cause:** Multiple windows match your `game-window-title` setting.
+  
+  **Solution:**
+  - Close extra Minecraft instances
+  - Make your `game-window-title` more specific
+  - Ensure only one Minecraft window is open
+</Accordion>
+
+<Accordion title="Config changes not taking effect">
+  **Issue:** Modified `config.toml` but bot still uses old settings.
+  
+  **Cause:** Configuration is cached in `src/utils/config.py:44` using `@cache`.
+  
+  **Solution:**
+  1. Completely stop the bot (Ctrl+C)
+  2. Edit `config.toml`
+  3. Restart with `uv run main`
+  
+  <Note>
+    The cache persists for the lifetime of the Python process.
+  </Note>
+</Accordion>
+
+<Accordion title="Invalid TOML syntax error">
+  **Error message:**
+  ```
+  tomllib.TOMLDecodeError: Invalid TOML
+  ```
+  
+  **Common mistakes:**
+  - Strings not in quotes: `game-window-title = GT: New Horizons` ❌
+  - Correct: `game-window-title = "GT: New Horizons"` ✓
+  
+  - Missing brackets in arrays: `disabled-aspects = "caelum", "tabernus"` ❌
+  - Correct: `disabled-aspects = ["caelum", "tabernus"]` ✓
+  
+  - Wrong section syntax: `general` ❌
+  - Correct: `[general]` ✓
+  
+  **Solution:** Validate your TOML syntax at [toml-lint.com](https://www.toml-lint.com/)
+</Accordion>
+
+## Solver Issues
+
+<Accordion title="Solver is taking too long (minutes)">
+  **Issue:** Large boards with many given aspects (9+) take a very long time to solve.
+  
+  **This is a known limitation** mentioned in the README.
+  
+  **Performance characteristics:**
+  - Small boards (2-4 aspects): < 1 second
+  - Medium boards (5-6 aspects): 1-5 seconds
+  - Large boards (7-8 aspects): 5-30 seconds
+  - Very large boards (9+ aspects): 30+ seconds to minutes
+  
+  **What you can do:**
+  - Be patient - the solver will eventually find a solution
+  - Check `debug_render.png` to see if the board was parsed correctly
+  - Consider solving very large puzzles manually
+  
+  <Tip>
+    The solver quality is excellent even on slow puzzles. The solution will use simple/cheap aspects efficiently.
+  </Tip>
+</Accordion>
+
+<Accordion title="Solver fails with an error">
+  **What to do:**
+  1. Check the terminal output for error messages
+  2. Look at `debug_render.png` - it shows how the board was interpreted
+  3. Verify `debug_input.png` is a clear screenshot of the puzzle
+  
+  **Common causes:**
+  - Board wasn't parsed correctly (holes detected wrong)
+  - Disabled aspects that are required for the solution
+  - Board has aspects manually placed (should only have initial aspects)
+  
+  **Reporting bugs:**
+  When reporting solver crashes on GitHub, include:
+  - The `debug_input.png` file
+  - The `debug_render.png` file
+  - The terminal error output
+  - Your `config.toml` (especially `disabled-aspects`)
+</Accordion>
+
+<Accordion title="Solution uses expensive aspects I don't want">
+  **Issue:** Bot uses aspects you want to conserve.
+  
+  **Solution:** Configure custom aspect costs in `config.toml`:
+  
+  ```toml
+  [aspect-costs]
+  # Aspects to avoid (set high cost)
+  praecantatio = 20
+  vitium = 20
+  
+  # Aspects you have lots of (set low cost)
+  instrumentum = 1
+  motus = 1
+  ```
+  
+  The solver will prefer lower-cost aspects. See [Configuration Guide](/guides/configuration#aspect-costs) for details.
+</Accordion>
+
+<Accordion title="Invalid solution detected - duplicate coordinates">
+  **Error in logs:**
+  ```
+  Duplicate coordinate (x, y) found in solution!
+  Invalid solution detected! Some hexes have multiple aspects assigned!
+  ```
+  
+  **This is a solver bug.** The solver shouldn't assign multiple aspects to the same hexagon.
+  
+  **What to do:**
+  1. Check `debug_render.png` to see the invalid solution
+  2. Report this on GitHub with:
+     - `debug_input.png`
+     - `debug_render.png`
+     - Terminal output
+  3. Try running again with `r` (retry) or process the next board
+  
+  <Note>
+    The bot continues execution and generates debug images even when the solution is invalid (see `src/__main__.py:392-393`).
+  </Note>
+</Accordion>
+
+## Missing Aspects Issues
+
+<Accordion title="Bot detects missing aspects I actually have">
+  **Issue:** Bot says aspects are missing but they're in your inventory.
+  
+  **Causes:**
+  1. Aspects are in a different position than expected
+  2. Resource pack isn't working for those specific aspects
+  3. Tooltip is covering the aspect
+  
+  **Solutions:**
+  - Check `debug_render.png` to see which aspects were detected
+  - Ensure all aspects are visible (no tooltips covering them)
+  - Verify resource pack is active
+  - Try researching a simpler aspect first to verify detection works
+</Accordion>
+
+<Accordion title="Automatic aspect crafting isn't working">
+  **Note:** Automatic crafting is marked as **experimental** in the README.
+  
+  **Known issue from code:**
+  > "When crafting an aspect we never had before, the screen positions of other aspects may change, which can break this!" (see `src/utils/mouseactions.py:53`)
+  
+  **Recommendation:**
+  - Craft missing aspects manually before starting
+  - Answer "n" when asked about automatic crafting
+  - Ensure you have all compound aspects in your inventory
+  
+  **If you want to try automatic crafting:**
+  1. Answer "y" when prompted
+  2. Watch the first few crafts carefully
+  3. If positions get misaligned, stop and restart
+</Accordion>
+
+## Installation and Environment Issues
+
+<Accordion title="'uv' is not recognized as a command">
+  **Issue:** uv is not installed or not in PATH.
+  
+  **Solution:**
+  1. Install uv following the [official guide](https://docs.astral.sh/uv/)
+  2. On Windows, you may need to restart your terminal
+  3. Verify installation: `uv --version`
+</Accordion>
+
+<Accordion title="Linux support?">
+  **Answer:** Not currently supported.
+  
+  From the README:
+  > "No Linux Support - I don't want to deal with finding a universal way of taking screenshots and performing mouse input"
+  
+  **Why:**
+  - Screenshot libraries behave differently on Linux
+  - Mouse control varies by window manager/compositor
+  - Would require significant additional development
+</Accordion>
+
+<Accordion title="Import errors or missing modules">
+  **Error messages like:**
+  ```
+  ModuleNotFoundError: No module named 'pyautogui'
+  ```
+  
+  **Solution:**
+  - Use `uv run main` (not `python main.py`)
+  - uv automatically installs dependencies
+  - If issues persist, delete `.venv` folder and try again
+</Accordion>
+
+## File and Permission Issues
+
+<Accordion title="Can't write debug files">
+  **Issue:** Permission denied when saving `debug_input.png` or `debug_render.png`.
+  
+  **Solutions:**
+  - Run terminal as administrator (Windows)
+  - Check folder permissions
+  - Ensure the project folder isn't read-only
+  - Close image viewers that might have the files locked
+</Accordion>
+
+<Accordion title="test_inputs folder doesn't exist">
+  **Issue:** `test_all` mode fails because folder is missing.
+  
+  **Solution:**
+  Create the folder manually:
+  ```bash
+  mkdir test_inputs
+  ```
+  
+  <Note>
+    The bot auto-creates this folder when saving board samples (see `src/__main__.py:402-404`).
+  </Note>
+</Accordion>
+
+## Getting Help
+
+If you encounter an issue not covered here:
+
+<Steps>
+  <Step title="Check debug files">
+    Look at `debug_input.png` and `debug_render.png` to see what the bot detected.
+  </Step>
+  
+  <Step title="Review configuration">
+    Verify your `config.toml` is correct and uses valid TOML syntax.
+  </Step>
+  
+  <Step title="Test in test mode">
+    Run `uv run main test` to verify the solver works without mouse actions.
+  </Step>
+  
+  <Step title="Report on GitHub">
+    Create an issue at the project's GitHub repository with:
+    - Description of the problem
+    - Steps to reproduce
+    - `debug_input.png` and `debug_render.png`
+    - Terminal output (error messages)
+    - Your `config.toml`
+    - OS and screen resolution
+  </Step>
+</Steps>
+
+<Note>
+  From the README: "You may also find me on the GTNH discord server."
+</Note>
+
+## Known Limitations
+
+These are documented limitations from the README:
+
+1. **No Linux Support** - Windows only due to screenshot/mouse control libraries
+2. **Solver scaling** - Large boards (7+ given aspects) get slow
+3. **No aspect detection** - Doesn't detect how many of each aspect you own
+4. **Fixed mouse speed** - No configuration option to adjust timing
+5. **Limited GUI size testing** - Not well tested on different GUI scales and resolutions
+6. **Negative coordinates** - Screenshot library fails when window is at negative screen coordinates
+
+## Next Steps
+
+- [Usage Guide](/guides/usage) - Learn proper bot operation
+- [Configuration Guide](/guides/configuration) - Customize settings to avoid issues
+- [GitHub Issues](https://github.com/leumasme/thaumcraft4-research-bot/issues) - Report bugs and get help

@@ -1,0 +1,240 @@
+---
+title: Custom Aspect Costs
+description: Configure custom aspect costs to optimize research solutions based on your available resources
+---
+
+The Research Bot calculates solution costs based on aspect costs. By default, primal aspects cost 1, and compound aspects cost the sum of their components. You can override these costs in `config.toml` to optimize solutions based on your available resources.
+
+## Understanding Aspect Costs
+
+### Default Cost Calculation
+
+Aspect costs are calculated automatically based on their component structure:
+
+- **Primal aspects** (aer, aqua, terra, ignis, ordo, perditio): Cost = 1
+- **Compound aspects**: Cost = sum of parent aspects
+
+For example:
+- `aqua` and `terra` are primal, so they cost **1 each**
+- `victus` = aqua + terra, so it costs **2**
+- `herba` = terra + victus, so it costs **3** (1 + 2)
+
+The solver uses these costs to find solutions that minimize total aspect usage.
+
+### Why Customize Costs?
+
+Custom costs help the solver prefer aspects you have in abundance:
+
+- Set common aspects (like `instrumentum`) to cost **1** to use them more often
+- Set rare aspects to higher costs to avoid using them
+- Optimize for your specific resource situation
+
+## Configuration Format
+
+Edit the `[aspect-costs]` section in `config.toml`:
+
+```toml config.toml
+[aspect-costs]
+# Define custom aspect costs here
+# Research solutions are scored by the total cost of all aspects used in the solution.
+# By default, all the primal aspects cost 1, all other aspects cost the sum of their components
+# Example:
+#   - aqua and terra are primal, so they cost 1 each
+#   - victus = aqua + terra, so it costs 2
+#   - herba = terra + victus, so it costs 3
+# You can override these defaults like this, one entry per line:
+instrumentum = 1
+machina = 1
+potentia = 2
+```
+
+### Configuration Rules
+
+- One aspect per line in the format: `aspect-name = cost`
+- Aspect names must be lowercase
+- Costs must be positive integers
+- Lines starting with `#` are comments
+
+## Optimization Strategies
+
+### Strategy 1: Prioritize Abundant Aspects
+
+If you have large stockpiles of certain aspects, set their costs to 1:
+
+```toml
+[aspect-costs]
+# I have tons of these from automation
+instrumentum = 1
+machina = 1
+motus = 1
+fabrico = 1
+```
+
+This makes the solver prefer these aspects even if they're normally expensive compounds.
+
+### Strategy 2: Avoid Rare Aspects
+
+Set high costs for aspects you want to conserve:
+
+```toml
+[aspect-costs]
+# Rare aspects I want to save
+praecantatio = 10
+vitium = 10
+alienis = 10
+```
+
+### Strategy 3: Balance by Mod Availability
+
+Configure costs based on which mods provide easy sources:
+
+```toml
+[aspect-costs]
+# Easy to get from Thaumcraft farms
+herba = 1
+arbor = 1
+victus = 1
+
+# Harder to obtain in early game
+humanus = 5
+cognitio = 5
+```
+
+## Cost Calculation Algorithm
+
+The bot calculates aspect costs using an iterative algorithm:
+
+1. **Initialize primal aspects** to cost 1 (or custom override)
+2. **Process compound aspects** whose parent costs are known
+3. **Calculate cost** as the sum of parent aspect costs
+4. **Repeat** until all aspects have known costs
+5. **Apply overrides** from `config.toml`
+
+From `src/utils/aspects.py:101-132`:
+
+```python
+# Compute aspect costs without recursion by caching the results in a dictionary
+aspect_costs = {k.lower(): v for k, v in get_global_config().aspect_cost_overrides.items()}
+
+# Initialize primal aspects (aspects without parents) with cost 1
+for aspect, parents in aspect_parents.items():
+    if parents == (None, None) and aspect not in aspect_costs:
+        aspect_costs[aspect] = 1
+
+# Aspects whose costs are not calculated yet
+remaining_aspects = set(aspect_parents.keys()) - set(aspect_costs.keys())
+
+# Iteratively compute costs for aspects whose parents' costs are known
+while remaining_aspects:
+    progress = False
+    for aspect in list(remaining_aspects):
+        parents = aspect_parents[aspect]
+        # Check if all parents' costs are known
+        if all(parent in aspect_costs for parent in parents if parent is not None):
+            # Compute the aspect's cost as the sum of its parents' costs
+            total_cost = sum(
+                aspect_costs[parent] for parent in parents if parent is not None
+            )
+            aspect_costs[aspect] = total_cost
+            remaining_aspects.remove(aspect)
+            progress = True
+```
+
+<Tip>
+Custom cost overrides are applied **before** calculating compound aspect costs. If you set `victus = 5`, then `herba` (victus + terra) will default to cost 6.
+</Tip>
+
+## Verifying Your Configuration
+
+After modifying costs, test the configuration:
+
+<CodeGroup>
+```bash Windows (PowerShell)
+uv run main test
+```
+
+```bash Windows (CMD)
+uv run main test
+```
+
+```bash macOS/Linux
+uv run main test
+```
+</CodeGroup>
+
+Check the output for:
+- No config parsing errors
+- Solution costs that seem reasonable
+- Preferred aspects appearing in solutions
+
+## Examples
+
+### GTNH Early Game
+
+```toml
+[aspect-costs]
+# Abundant from mining/farming
+metallum = 1
+vitreus = 1
+herba = 1
+arbor = 1
+
+# Limited by mob farms
+humanus = 5
+bestia = 3
+```
+
+### GTNH Late Game
+
+```toml
+[aspect-costs]
+# Everything automated
+instrumentum = 1
+machina = 1
+potentia = 1
+fabrico = 1
+
+# Save the expensive magical stuff
+praecantatio = 8
+vitium = 8
+```
+
+### Minimal Configuration
+
+```toml
+[aspect-costs]
+# Just make instrumentum cheap since it's everywhere
+instrumentum = 1
+```
+
+<Note>
+Changes to `config.toml` take effect immediately on the next board solve. No need to restart the bot.
+</Note>
+
+## Troubleshooting
+
+### Invalid Aspect Names
+
+If you see warnings about unknown aspects:
+
+```
+Warning: Unknown aspect 'instrumetum' in config
+```
+
+Check for typos. All aspect names must match exactly (lowercase).
+
+### Unexpected Solutions
+
+If solutions don't use your preferred aspects:
+
+1. Verify the aspect name spelling
+2. Check that the cost is actually lower than alternatives
+3. Remember that the solver also considers path length and availability
+
+### Config File Not Found
+
+The bot creates `config.toml` automatically on first run with default values. If you deleted it, just run the bot again:
+
+```bash
+uv run main
+```

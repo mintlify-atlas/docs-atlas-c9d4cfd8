@@ -1,0 +1,455 @@
+---
+title: Building from Source
+description: Build standalone executables with Nuitka or set up a development environment
+---
+
+The Research Bot can be built into a standalone executable for distribution, or run directly from source for development.
+
+## Prerequisites
+
+### Required Software
+
+<Steps>
+<Step title="Install Python 3.12+">
+The project requires Python 3.12 or later.
+
+<CodeGroup>
+```bash Windows
+winget install Python.Python.3.12
+```
+
+```bash macOS
+brew install python@3.12
+```
+
+```bash Linux (Ubuntu/Debian)
+sudo apt install python3.12 python3.12-venv
+```
+</CodeGroup>
+</Step>
+
+<Step title="Install uv">
+[uv](https://docs.astral.sh/uv/) is a fast Python package manager and runner.
+
+<CodeGroup>
+```bash Windows (PowerShell)
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+```bash macOS/Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+</CodeGroup>
+</Step>
+
+<Step title="Clone the Repository">
+```bash
+git clone https://github.com/leumasme/thaumcraft4-research-bot.git
+cd thaumcraft4-research-bot
+```
+
+Or download and extract the ZIP from GitHub.
+</Step>
+</Steps>
+
+## Running from Source
+
+### Quick Start
+
+The fastest way to run the bot:
+
+<CodeGroup>
+```bash Windows (PowerShell)
+uv run main
+```
+
+```bash Windows (CMD)
+uv run main
+```
+
+```bash macOS/Linux
+uv run main
+```
+</CodeGroup>
+
+The `uv run` command automatically:
+1. Creates a virtual environment
+2. Installs dependencies
+3. Runs the bot
+
+### Runtime Dependencies
+
+From `pyproject.toml:7-12`:
+
+```toml
+[project]
+requires-python = ">=3.12"
+dependencies = [
+    "pillow>=10.4.0",
+    "pyautogui>=0.9.54",
+    "numpy>=2.2.0",
+    "keyboard>=0.13.5",
+]
+```
+
+| Package | Purpose |
+|---------|----------|
+| **pillow** | Image processing and screenshot analysis |
+| **pyautogui** | Mouse control and window interaction |
+| **numpy** | Numerical operations for image data |
+| **keyboard** | Global hotkey detection |
+
+<Note>
+All dependencies are automatically installed by `uv run`. You don't need to install them manually.
+</Note>
+
+## Development Setup
+
+### Installing Dev Dependencies
+
+For code formatting, linting, and building:
+
+```bash
+uv sync --dev
+```
+
+This installs additional development tools from `pyproject.toml:14-20`:
+
+```toml
+[tool.uv]
+dev-dependencies = [
+    "black>=24.8.0",
+    "isort>=5.13.2",
+    "nuitka>=2.8.9",
+    "ruff>=0.6.7",
+]
+```
+
+| Tool | Purpose |
+|------|----------|
+| **black** | Code formatter |
+| **isort** | Import statement organizer |
+| **nuitka** | Python to C compiler for building executables |
+| **ruff** | Fast Python linter |
+
+### Code Formatting
+
+Format all Python files:
+
+```bash
+uv run black src/
+uv run isort src/
+```
+
+### Linting
+
+Check code quality:
+
+```bash
+uv run ruff check src/
+```
+
+Auto-fix issues:
+
+```bash
+uv run ruff check --fix src/
+```
+
+### Project Structure
+
+```
+thaumcraft4-research-bot/
+├── src/
+│   ├── __main__.py          # Entry point and main logic
+│   ├── utils/
+│   │   ├── config.py        # Configuration management
+│   │   ├── aspects.py       # Aspect cost calculation
+│   │   ├── grid.py          # Hex grid data structures
+│   │   ├── finder.py        # Image recognition
+│   │   ├── window.py        # Window management
+│   │   ├── mouseactions.py  # Mouse control
+│   │   ├── renderer.py      # Debug visualization
+│   │   └── log.py           # Logging utilities
+│   └── solvers/
+│       └── ringsolver.py    # Research puzzle solver
+├── pyproject.toml           # Project configuration
+├── config.toml              # User configuration (auto-generated)
+├── debug_input.png          # Latest screenshot
+├── debug_render.png         # Solution visualization
+└── test_inputs/             # Saved test boards
+```
+
+## Building Executables
+
+### Using Nuitka
+
+Nuitka compiles Python to C for better performance and standalone distribution.
+
+From `README.md:90-91`:
+
+<CodeGroup>
+```bash Windows (PowerShell)
+uv run -m nuitka --python-flag=-m --output-dir=dist --mode=onefile --lto=yes src
+```
+
+```bash Windows (CMD)
+uv run -m nuitka --python-flag=-m --output-dir=dist --mode=onefile --lto=yes src
+```
+
+```bash macOS/Linux
+uv run -m nuitka --python-flag=-m --output-dir=dist --mode=onefile --lto=yes src
+```
+</CodeGroup>
+
+### Build Options Explained
+
+| Option | Description |
+|--------|-------------|
+| `--python-flag=-m` | Run as module (enables `__main__.py`) |
+| `--output-dir=dist` | Output directory for the executable |
+| `--mode=onefile` | Create a single executable file |
+| `--lto=yes` | Enable link-time optimization for smaller size |
+| `src` | Source directory to compile |
+
+### Build Process
+
+<Steps>
+<Step title="Compilation">
+Nuitka compiles Python to C, then to machine code. This takes several minutes:
+
+```
+Nuitka: Starting compilation...
+Nuitka: Compiling module 'src'
+Nuitka: Compiling module 'src.utils.config'
+...
+```
+</Step>
+
+<Step title="Linking">
+All dependencies are bundled into a single executable:
+
+```
+Nuitka: Creating single file from dist/src.dist
+Nuitka: Using onefile compression: yes
+```
+</Step>
+
+<Step title="Output">
+The final executable appears in `dist/`:
+
+```
+dist/
+└── src.exe          # Windows
+    or src.bin       # Linux
+    or src.app       # macOS
+```
+</Step>
+</Steps>
+
+<Warning>
+Building executables requires a C compiler:
+- **Windows**: Visual Studio or MinGW-w64
+- **Linux**: gcc (usually pre-installed)
+- **macOS**: Xcode Command Line Tools
+</Warning>
+
+### Advanced Build Options
+
+For smaller executables:
+
+```bash
+uv run -m nuitka --python-flag=-m --output-dir=dist --mode=onefile --lto=yes \
+  --remove-output --assume-yes-for-downloads src
+```
+
+For debugging builds:
+
+```bash
+uv run -m nuitka --python-flag=-m --output-dir=dist --mode=standalone \
+  --enable-console --debug src
+```
+
+<Tip>
+Use `--mode=standalone` instead of `--mode=onefile` for faster startup times. This creates a directory with the executable and dependencies instead of a single file.
+</Tip>
+
+## Distribution
+
+### Pre-built Releases
+
+Download official releases from [GitHub Releases](https://github.com/leumasme/thaumcraft4-research-bot/releases).
+
+From `README.md:79-80`:
+> To run as a non-technical user:  
+> Download and run the .exe from the releases page
+
+### Creating Releases
+
+<Steps>
+<Step title="Build the executable">
+```bash
+uv run -m nuitka --python-flag=-m --output-dir=dist --mode=onefile --lto=yes src
+```
+</Step>
+
+<Step title="Test the executable">
+```bash
+./dist/src.exe  # Windows
+./dist/src.bin  # Linux
+./dist/src.app  # macOS
+```
+</Step>
+
+<Step title="Package dependencies">
+Include the resource pack and README:
+
+```bash
+zip release.zip dist/src.exe README.md resource-pack/
+```
+</Step>
+
+<Step title="Upload to GitHub">
+Create a new release on GitHub and attach the ZIP file.
+</Step>
+</Steps>
+
+## Testing Builds
+
+### Verify Functionality
+
+Test the built executable in all modes:
+
+<CodeGroup>
+```bash Normal Mode
+./dist/src.exe
+```
+
+```bash Test Mode
+./dist/src.exe test
+```
+
+```bash Test All Mode
+./dist/src.exe test_all
+```
+</CodeGroup>
+
+### Performance Comparison
+
+Compare performance between source and compiled:
+
+| Metric | Source (`uv run`) | Compiled (Nuitka) |
+|--------|-------------------|-------------------|
+| **Startup time** | ~2-3 seconds | &lt;1 second |
+| **Solve time** | Same | Same |
+| **File size** | N/A | ~50-80 MB |
+
+## Troubleshooting
+
+### Common Build Errors
+
+<AccordionGroup>
+<Accordion title="ImportError: No module named 'PIL'">
+**Problem**: Pillow not bundled correctly
+
+**Solution**: Ensure Pillow is in dependencies and rebuild:
+
+```bash
+uv sync
+uv run -m nuitka --python-flag=-m --output-dir=dist --mode=onefile --lto=yes src
+```
+</Accordion>
+
+<Accordion title="C compiler not found">
+**Problem**: No C compiler installed
+
+**Solution**: Install a C compiler:
+
+- **Windows**: Install [Visual Studio](https://visualstudio.microsoft.com/) with C++ tools
+- **Linux**: `sudo apt install build-essential`
+- **macOS**: `xcode-select --install`
+</Accordion>
+
+<Accordion title="Antivirus blocking executable">
+**Problem**: Antivirus flags the executable as suspicious
+
+**Solution**: This is common with Nuitka builds. Add an exclusion or use code signing for distribution.
+</Accordion>
+
+<Accordion title="executable too large (>100MB)">
+**Problem**: Bundled dependencies are large
+
+**Solution**: Use standalone mode for faster startup:
+
+```bash
+uv run -m nuitka --python-flag=-m --output-dir=dist --mode=standalone --lto=yes src
+```
+</Accordion>
+</AccordionGroup>
+
+### Runtime Issues
+
+**Problem**: `config.toml` not found
+
+**Solution**: The executable creates `config.toml` in the current working directory. Run from a writable location.
+
+---
+
+**Problem**: Performance degradation
+
+**Solution**: Nuitka builds should be faster. Check if antivirus is scanning the executable on each run.
+
+## Platform-Specific Notes
+
+### Windows
+
+- Requires Visual Studio 2017 or later for building
+- Executable name: `src.exe`
+- Default console application (window appears)
+
+### Linux
+
+- Not officially supported (no screenshot/mouse libraries tested)
+- Build may work but runtime will fail
+- See `README.md:47-48` for Linux limitation
+
+### macOS
+
+- Not officially supported
+- Requires code signing for distribution
+- May need additional permissions for screen capture
+
+<Warning>
+**No Linux/macOS Support**: The bot uses Windows-specific libraries (`pygetwindow`, `pyautogui`) that don't work reliably on other platforms.
+</Warning>
+
+## Continuous Integration
+
+For automated builds, use GitHub Actions:
+
+```yaml .github/workflows/build.yml
+name: Build
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+      - name: Install uv
+        run: pip install uv
+      - name: Build
+        run: uv run -m nuitka --python-flag=-m --output-dir=dist --mode=onefile --lto=yes src
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: executable
+          path: dist/src.exe
+```
+
+<Tip>
+Use GitHub Actions to automatically build executables on every commit or release tag.
+</Tip>

@@ -1,0 +1,126 @@
+---
+title: Installation
+description: Install the Thaumcraft 4 Research Bot using uv package manager
+---
+
+# Installation
+
+Get the bot up and running on your system.
+
+## Prerequisites
+
+<Steps>
+  <Step title="Python version">
+    Python 3.12 or higher is required.
+    
+    Check your Python version:
+    ```bash
+    python --version
+    ```
+  </Step>
+  
+  <Step title="Operating system">
+    Windows is required for screenshot and mouse control functionality.
+    
+    <Warning>
+    Linux is not supported due to platform-specific requirements for window management and input control.
+    </Warning>
+  </Step>
+  
+  <Step title="Minecraft setup">
+    You need:
+    - Minecraft 1.7.10
+    - Thaumcraft 4 installed
+    - A modpack that uses Thaumcraft 4 (tested with GTNH)
+  </Step>
+</Steps>
+
+## System requirements
+
+- **Display**: Main screen with sufficient resolution for the Minecraft window
+- **RAM**: Standard Python runtime requirements
+- **Disk space**: Minimal (< 100 MB for dependencies)
+
+## Install uv
+
+[uv](https://docs.astral.sh/uv/) is a fast Python package manager and runner that simplifies dependency management.
+
+Install uv following the [official documentation](https://docs.astral.sh/uv/):
+
+```bash
+# Windows (PowerShell)
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+<Info>
+The bot uses uv to automatically manage dependencies and the Python environment. You don't need to create a virtual environment manually.
+</Info>
+
+## Download the project
+
+<Steps>
+  <Step title="Get the source code">
+    Download the latest release or clone the repository:
+    
+    ```bash
+    git clone https://github.com/leumasme/thaumcraft4-research-bot.git
+    cd thaumcraft4-research-bot
+    ```
+    
+    Or download and unzip the source code into a new folder.
+  </Step>
+  
+  <Step title="Verify project structure">
+    Your project folder should contain:
+    - `src/` - Main source code
+    - `pyproject.toml` - Project configuration
+    - `README.md` - Documentation
+  </Step>
+</Steps>
+
+## Dependencies
+
+The project uses the following key dependencies (automatically installed by uv):
+
+```toml
+[project]
+requires-python = ">=3.12"
+dependencies = [
+    "pillow>=10.4.0",      # Image processing
+    "pyautogui>=0.9.54",   # Mouse control
+    "numpy>=2.2.0",        # Numerical operations
+    "keyboard>=0.13.5",    # Keyboard input
+]
+```
+
+## Install the resource pack
+
+<Warning>
+A custom resource pack is **required** for the pixel-based puzzle recognition to work correctly.
+</Warning>
+
+The resource pack provides visual markers that help the bot identify puzzle elements:
+
+1. Download the required resource pack from the project repository
+2. Install it in your Minecraft instance
+3. Activate it in the game settings
+
+<Note>
+Make sure the resource pack is active before running the bot, or puzzle recognition will fail.
+</Note>
+
+## Verify installation
+
+Test that everything is set up correctly:
+
+```bash
+uv run main --help
+```
+
+If uv is installed correctly, it will download dependencies and show usage information.
+
+## Next steps
+
+<Card title="Quick start guide" icon="rocket" href="/quick-start">
+  Learn how to solve your first research puzzle
+</Card>

@@ -1,0 +1,229 @@
+---
+title: Usage Guide
+description: Learn how to use the Thaumcraft 4 Research Bot to automate your research puzzles
+---
+
+## Overview
+
+The Thaumcraft 4 Research Bot automates the Thaumcraft 4 research minigame using screenshot-based puzzle recognition and an efficient solver algorithm. This guide covers normal operation, test modes, and advanced usage.
+
+## Prerequisites
+
+Before running the bot, ensure you have:
+
+- **uv** installed - Python package manager ([installation guide](https://docs.astral.sh/uv/))
+- **Windows OS** - Linux is not currently supported due to screenshot/mouse control limitations
+- **Minecraft 1.7.10** with Thaumcraft 4
+- **Resource Pack** installed (included in `minecraft_resource_pack/` folder)
+
+## Resource Pack Setup
+
+<Steps>
+  <Step title="Locate the resource pack">
+    The required resource pack is located in the `minecraft_resource_pack/` folder of the project.
+  </Step>
+  
+  <Step title="Install the resource pack">
+    Copy the entire `minecraft_resource_pack/` folder to your Minecraft resource packs directory:
+    ```
+    .minecraft/resourcepacks/
+    ```
+  </Step>
+  
+  <Step title="Activate the resource pack">
+    In Minecraft, go to **Options** → **Resource Packs** and activate the "Thaumcraft Research Bot Textures" pack.
+  </Step>
+</Steps>
+
+<Warning>
+  The resource pack is **required** for the bot to recognize aspects correctly. Without it, puzzle recognition will fail.
+</Warning>
+
+## Normal Mode
+
+Normal mode is the primary way to use the bot for solving research puzzles.
+
+### Preparation
+
+<Steps>
+  <Step title="Prepare the game">
+    - Open a Research Table in Minecraft
+    - Insert an **unsolved** Research Notes item
+    - Ensure the puzzle board only contains the initially given aspects (no aspects you've placed)
+    - Position the game window on your **main screen**
+    - Make sure the window is **large enough** for clear screenshots
+    - Hide any tooltips that might cover the puzzle board
+  </Step>
+  
+  <Step title="Hide NEI (optional but recommended)">
+    Press `O` (default GTNH keybind) to hide the NEI overlay, preventing tooltips from interfering with screenshots.
+  </Step>
+  
+  <Step title="Open terminal">
+    Navigate to the project folder in your terminal (Windows Terminal, PowerShell, or CMD).
+  </Step>
+  
+  <Step title="Start the bot">
+    Run the following command:
+    ```bash
+    uv run main
+    ```
+  </Step>
+</Steps>
+
+### What Happens Next
+
+When you run the bot, it will automatically:
+
+1. **Bring the game to the foreground** - The Minecraft window will be focused
+2. **Take a screenshot** - Captures the current puzzle board (saved as `debug_input.png`)
+3. **Parse the puzzle** - Recognizes aspects and empty hexagons on the board
+4. **Generate a solution** - Calculates an optimal solution using the solver algorithm
+5. **Place aspects** - Moves the mouse to drag and place aspects according to the solution
+
+<Note>
+  A debug render image (`debug_render.png`) is saved showing the board interpretation and solution path.
+</Note>
+
+### Processing Multiple Boards
+
+After the bot completes a puzzle:
+
+1. Insert the next unsolved Research Notes into the Research Table
+2. Press **Enter** in the terminal to process the next board
+3. Or use the global hotkey (default: `Ctrl+R`) configured in `config.toml`
+
+```
+-- Press Enter to process next board (or 'r' to retry, or global 'ctrl+r') --
+```
+
+**Available commands:**
+- **Enter** - Process the next board
+- **r** - Retry placing aspects on the current board (if something went wrong)
+- **Ctrl+R** - Global hotkey (works even when terminal isn't focused)
+
+## Emergency Stop
+
+<Warning>
+  If the mouse control starts behaving unexpectedly or going out of control:
+  
+  **Move your mouse to the top-left corner of the screen immediately!**
+  
+  This will trigger an emergency stop and halt all mouse actions.
+</Warning>
+
+This safety feature is built into the mouse control libraries and will prevent further actions.
+
+## Test Modes
+
+The bot includes test modes for debugging and benchmarking without affecting your game.
+
+### Test Mode
+
+Processes a single test image without performing mouse actions:
+
+```bash
+uv run main test
+```
+
+This mode:
+- Reads from `debug_input.png` instead of taking a screenshot
+- Does **not** perform any clicks or window actions
+- Useful for testing the solver on a specific puzzle
+
+<Tip>
+  Use test mode to verify the bot can solve a particular puzzle before running it in normal mode.
+</Tip>
+
+### Test All Mode
+
+Runs the solver on all saved test inputs for benchmarking:
+
+```bash
+uv run main test_all
+```
+
+This mode:
+- Processes all `board_*.png` files in the `test_inputs/` folder
+- Reports parsing time and solving time for each board
+- Displays solution cost (total aspect cost)
+- Does **not** perform any mouse actions
+
+Example output:
+```
+Found 15 test samples to check
+Testing file test_inputs/board_a3f12b.png
+Solved with score 24 in 15.43+127.82ms
+```
+
+## Understanding Output
+
+The bot creates several output files:
+
+- **debug_input.png** - Screenshot of the current puzzle board
+- **debug_render.png** - Annotated image showing:
+  - Board coordinates for each hexagon
+  - Solution paths drawn on the board
+  - Placement hints showing which aspects to place
+- **test_inputs/board_[hash].png** - Automatically saved unique puzzle boards
+
+<Note>
+  The board hash is generated from the puzzle structure, so identical board layouts will have the same hash.
+</Note>
+
+## Missing Aspects Detection
+
+If the bot detects aspects in the puzzle that aren't in your inventory, it will prompt you:
+
+```
+Missing aspect herba from inventory (made from terra + victus)
+Missing aspects from inventory! Should they be crafted automatically? [y/N]:
+```
+
+**Options:**
+- Type `y` + Enter - Bot will automatically craft missing aspects by combining their parents
+- Type `n` or Enter - Bot will shut down safely
+
+<Warning>
+  Automatic aspect crafting is **experimental**. Monitor the first few crafts to ensure it works correctly.
+</Warning>
+
+## Performance Considerations
+
+### Solver Speed
+
+The solver algorithm scales with puzzle complexity:
+
+- **Small boards** (2-4 given aspects): Nearly instant (< 1 second)
+- **Medium boards** (5-6 given aspects): Fast (1-5 seconds)
+- **Large boards** (7-8 given aspects): Moderate (5-30 seconds)
+- **Very large boards** (9+ given aspects): Slow (30+ seconds, potentially minutes)
+
+<Tip>
+  The bot prioritizes solutions using simple/cheap aspects. Solution quality is excellent even when computation takes longer.
+</Tip>
+
+### Mouse Speed
+
+The bot uses a fixed mouse speed optimized for consistent performance. If your machine is experiencing lag:
+
+- Reduce Minecraft graphics settings
+- Close background applications
+- Ensure the game window remains focused during aspect placement
+
+<Note>
+  Currently there's no configuration option to adjust mouse speed. The timing in `src/utils/mouseactions.py:10-22` is hardcoded.
+</Note>
+
+## Best Practices
+
+1. **Keep the game window maximized** - Ensures consistent screenshot positions
+2. **Don't move the mouse** - While the bot is placing aspects
+3. **Save your progress** - Complete research notes before closing Minecraft
+4. **Monitor the first few runs** - Verify the bot is working correctly for your setup
+5. **Check debug_render.png** - If solutions seem wrong, inspect the rendered output to see how the board was interpreted
+
+## Next Steps
+
+- [Configure the bot](/guides/configuration) - Customize game window title, hotkeys, and aspect costs
+- [Troubleshooting](/guides/troubleshooting) - Solve common issues and errors

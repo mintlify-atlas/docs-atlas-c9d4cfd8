@@ -1,0 +1,321 @@
+---
+title: Configuration Guide
+description: Configure the Thaumcraft 4 Research Bot with custom settings, hotkeys, and aspect costs
+---
+
+## Overview
+
+The bot uses a `config.toml` file for configuration. This file is automatically created with default settings when you first run the bot.
+
+## Configuration File Location
+
+The configuration file is located at:
+```
+config.toml
+```
+
+This file should be in the **root directory** of the project (the same folder where you run `uv run main`).
+
+<Note>
+  If `config.toml` doesn't exist, it will be automatically created with default settings from `src/utils/config.py:10-33`.
+</Note>
+
+## Configuration Format
+
+The configuration file uses [TOML](https://toml.io/) format. Here's the complete default configuration:
+
+```toml
+# Thaumcraft 4 Research Bot Configuration
+# Lines starting with '#' are comments and will be ignored.
+
+[general]
+# Title (or beginning of title) of the game window
+game-window-title = "GT: New Horizons"
+
+# Global hotkey to process the next board (like pressing Enter in the console)
+next-board-hotkey = "ctrl+r"
+
+# List of aspects to disable (pretend they do not exist, like if their mod/addon is not installed)
+disabled-aspects = []
+# Example: disabled-aspects = ["caelum", "tabernus"]
+
+[aspect-costs]
+# Define custom aspect costs here
+# Research solutions are scored by the total cost of all aspects used in the solution.
+# By default, all the primal aspects cost 1, all other aspects cost the sum of their components
+# Example:
+#   - aqua and terra are primal, so they cost 1 each
+#   - victus = aqua + terra, so it costs 2
+#   - herba = terra + victus, so it costs 3
+# You can override these defaults like this, one entry per line (without the #):
+# instrumentum = 1
+```
+
+## General Settings
+
+### Game Window Title
+
+```toml
+[general]
+game-window-title = "GT: New Horizons"
+```
+
+**Purpose:** Identifies which window to capture for screenshots.
+
+**How it works:** The bot searches for windows whose title **starts with** this string (see `src/utils/window.py:37-47`).
+
+**Common values:**
+- `"GT: New Horizons"` - For GTNH modpack
+- `"Minecraft 1.7.10"` - For vanilla Minecraft 1.7.10
+- `"Thaumcraft"` - If your window title contains Thaumcraft
+
+<Tip>
+  Check your Minecraft window title bar to see the exact text. You only need to specify the **beginning** of the title.
+</Tip>
+
+<Warning>
+  The bot will throw an error if it finds zero or multiple windows matching this title. Make sure the title is unique!
+</Warning>
+
+### Next Board Hotkey
+
+```toml
+[general]
+next-board-hotkey = "ctrl+r"
+```
+
+**Purpose:** Global hotkey to process the next board without switching to the terminal.
+
+**Default:** `ctrl+r`
+
+**Format:** Use `+` to combine keys (e.g., `ctrl+shift+r`, `alt+n`)
+
+**Setting to null:**
+```toml
+next-board-hotkey = ""
+```
+
+This disables the global hotkey, requiring you to press Enter in the terminal instead.
+
+<Note>
+  The hotkey is implemented in `src/__main__.py:97-125` using the `keyboard` library.
+</Note>
+
+### Disabled Aspects
+
+```toml
+[general]
+disabled-aspects = []
+```
+
+**Purpose:** Exclude certain aspects from the solver (useful if specific mod addons aren't installed).
+
+**Format:** Array of aspect names (lowercase)
+
+**Example:**
+```toml
+disabled-aspects = ["caelum", "tabernus", "alienis"]
+```
+
+This tells the solver to pretend these aspects don't exist, similar to if their mod/addon wasn't installed.
+
+<Warning>
+  Disabling aspects that are required for a puzzle solution may cause the solver to fail!
+</Warning>
+
+## Aspect Costs
+
+The `[aspect-costs]` section allows you to customize how the solver scores different aspects.
+
+### How Aspect Costs Work
+
+**Default behavior:**
+- **Primal aspects** (aer, aqua, ignis, terra, ordo, perditio) cost **1** each
+- **Compound aspects** cost the **sum of their components**
+
+Example:
+```
+aqua = 1 (primal)
+terra = 1 (primal)
+victus = aqua + terra = 2
+herba = terra + victus = 3
+```
+
+The solver finds solutions with the **lowest total cost**, preferring simpler aspects.
+
+### Custom Aspect Costs
+
+You can override the default costs:
+
+```toml
+[aspect-costs]
+instrumentum = 1
+machina = 2
+motus = 1
+```
+
+**Why customize costs?**
+- You have **abundant** aspects you want to use more often (set lower cost)
+- You have **scarce** aspects you want to avoid (set higher cost)
+- You prefer **specific aspects** for aesthetic or gameplay reasons
+
+### Example Configuration
+
+```toml
+[aspect-costs]
+# I have lots of these, use them more
+instrumentum = 1
+potentia = 1
+
+# I'm running low on these, avoid them
+victus = 10
+fames = 10
+
+# Expensive compound aspects I want to avoid
+praecantatio = 20
+vitium = 20
+```
+
+<Note>
+  Aspect costs are loaded in `src/utils/config.py:56-61` and used during solution scoring.
+</Note>
+
+## Configuration Loading
+
+The configuration is loaded when the bot starts:
+
+```python
+# From src/utils/config.py:45-61
+@cache
+def get_global_config() -> Config:
+    config_path = Path(CONFIG_FILE_NAME)
+    # If config file does not exist, create it with default content
+    if not config_path.exists():
+        with open(config_path, "w", encoding="utf-8") as f:
+            log.info(f"Config file '{CONFIG_FILE_NAME}' not found. Creating default config.")
+            f.write(DEFAULT_CONFIG.strip())
+            
+    with open(config_path, "rb") as f:
+        config_data = tomllib.load(f)
+        
+    return Config(
+        game_window_title=config_data["general"]["game-window-title"],
+        next_board_hotkey=config_data["general"].get("next-board-hotkey", None),
+        aspect_cost_overrides=config_data.get("aspect-costs", {}),
+        disabled_aspects=config_data["general"].get("disabled-aspects", []),
+    )
+```
+
+<Tip>
+  The configuration is cached using `@cache`, so changes require **restarting the bot** to take effect.
+</Tip>
+
+## Configuration Data Structure
+
+The loaded configuration is stored in a `Config` dataclass:
+
+```python
+# From src/utils/config.py:36-42
+@dataclass
+class Config:
+    game_window_title: str
+    next_board_hotkey: str | None
+    aspect_cost_overrides: dict[str, int]
+    disabled_aspects: list[str]
+```
+
+## Troubleshooting Configuration
+
+### Invalid TOML Syntax
+
+If you see an error like:
+```
+tomllib.TOMLDecodeError: Invalid TOML
+```
+
+**Solution:** Check your TOML syntax:
+- Strings must be in quotes: `"value"`
+- Arrays use brackets: `["item1", "item2"]`
+- Comments start with `#`
+- Section headers use `[section-name]`
+
+### Config File Not Found
+
+If the bot says it can't find `config.toml`:
+
+**Solution:** Make sure you're running `uv run main` from the correct directory (the project root).
+
+### Changes Not Taking Effect
+
+**Solution:** The configuration is cached. Restart the bot completely:
+1. Stop the current bot process (Ctrl+C)
+2. Run `uv run main` again
+
+### Game Window Not Found
+
+If you see:
+```
+Exception: Wrong number of game windows: 0
+```
+
+**Solution:** Verify your `game-window-title` setting matches your actual window title.
+
+<Tip>
+  Check the exact window title in your taskbar or window title bar.
+</Tip>
+
+## Advanced Configuration
+
+For advanced users who want to modify behavior beyond the config file:
+
+- **Mouse timing:** Edit delays in `src/utils/mouseactions.py:10-22`
+- **Screenshot region:** Modify `src/utils/window.py:14-34`
+- **Aspect detection colors:** Adjust color constants in `src/utils/finder.py`
+- **Solver algorithm:** Customize scoring in `src/solvers/ringsolver.py`
+
+<Warning>
+  Modifying source code requires understanding Python and the bot's architecture. Make backups before editing!
+</Warning>
+
+## Example Configurations
+
+### Minimal Configuration
+
+```toml
+[general]
+game-window-title = "Minecraft 1.7.10"
+next-board-hotkey = "ctrl+r"
+disabled-aspects = []
+
+[aspect-costs]
+```
+
+### Power User Configuration
+
+```toml
+[general]
+game-window-title = "GT: New Horizons"
+next-board-hotkey = "ctrl+shift+r"
+disabled-aspects = []
+
+[aspect-costs]
+# Common aspects I have in abundance
+instrumentum = 1
+motus = 1
+potentia = 1
+ordo = 1
+
+# Rare aspects I want to conserve
+praecantatio = 15
+vitium = 15
+auram = 12
+
+# Moderate cost aspects
+victus = 3
+fames = 3
+```
+
+## Next Steps
+
+- [Usage Guide](/guides/usage) - Learn how to run the bot
+- [Troubleshooting](/guides/troubleshooting) - Fix common configuration issues

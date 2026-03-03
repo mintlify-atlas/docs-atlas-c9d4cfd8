@@ -1,0 +1,411 @@
+---
+title: Aspect System
+description: Understanding Thaumcraft aspects, aspect_parents, cost calculation, and pathfinding in aspect space
+---
+
+## Overview
+
+Thaumcraft 4's magic system is built on **aspects** - fundamental essences that can be combined to create more complex aspects. The bot models this as a directed graph to find optimal transformation paths.
+
+## Aspect Hierarchy
+
+### Primal Aspects
+
+The six primal aspects are the foundation of all Thaumcraft magic:
+
+<CardGroup cols={3}>
+  <Card title="Aer" icon="wind">
+    Air - Cost: 1
+  </Card>
+  <Card title="Terra" icon="mountain">
+    Earth - Cost: 1
+  </Card>
+  <Card title="Ignis" icon="fire">
+    Fire - Cost: 1
+  </Card>
+  <Card title="Aqua" icon="droplet">
+    Water - Cost: 1
+  </Card>
+  <Card title="Ordo" icon="sparkles">
+    Order - Cost: 1
+  </Card>
+  <Card title="Perditio" icon="skull">
+    Chaos - Cost: 1
+  </Card>
+</CardGroup>
+
+Primal aspects cannot be broken down further and have the minimum cost of 1.
+
+### Compound Aspects
+
+All other aspects are created by combining two parent aspects. This is defined in `aspect_parents`:
+
+```python
+aspect_parents: dict[str, Tuple[str, str] | Tuple[None, None]] = {
+    # Primal aspects have no parents
+    "aer": (None, None),
+    "aqua": (None, None),
+    "ordo": (None, None),
+    "terra": (None, None),
+    "ignis": (None, None),
+    "perditio": (None, None),
+    
+    # Tier 1 compounds (from two primals)
+    "lux": ("aer", "ignis"),      # Light = Air + Fire
+    "motus": ("aer", "ordo"),     # Motion = Air + Order
+    "victus": ("aqua", "terra"),  # Life = Water + Earth
+    "gelum": ("ignis", "perditio"), # Ice = Fire + Chaos
+    "vacuos": ("aer", "perditio"), # Void = Air + Chaos
+    "potentia": ("ordo", "ignis"), # Energy = Order + Fire
+    
+    # Tier 2 compounds (from tier 1 + primals)
+    "herba": ("victus", "terra"),   # Plant = Life + Earth
+    "bestia": ("motus", "victus"),  # Beast = Motion + Life
+    "spiritus": ("victus", "mortuus"), # Soul = Life + Death
+    
+    # And so on... 65+ total aspects
+}
+```
+
+<Accordion title="View Full Aspect Hierarchy (Click to expand)">
+```python
+aspect_parents = {
+    # Primals
+    "aer": (None, None),
+    "aqua": (None, None),
+    "ordo": (None, None),
+    "terra": (None, None),
+    "ignis": (None, None),
+    "perditio": (None, None),
+    
+    # Compounds
+    "lux": ("aer", "ignis"),
+    "motus": ("aer", "ordo"),
+    "arbor": ("aer", "herba"),
+    "ira": ("telum", "ignis"),
+    "sano": ("victus", "ordo"),
+    "iter": ("motus", "terra"),
+    "victus": ("aqua", "terra"),
+    "volatus": ("aer", "motus"),
+    "limus": ("victus", "aqua"),
+    "gula": ("fames", "vacuos"),
+    "tempestas": ("aer", "aqua"),
+    "vitreus": ("terra", "ordo"),
+    "herba": ("victus", "terra"),
+    "radio": ("lux", "potentia"),
+    "tempus": ("vacuos", "ordo"),
+    "vacuos": ("aer", "perditio"),
+    "potentia": ("ordo", "ignis"),
+    "bestia": ("motus", "victus"),
+    "sensus": ("aer", "spiritus"),
+    "fames": ("victus", "vacuos"),
+    "gelum": ("ignis", "perditio"),
+    "messis": ("herba", "humanus"),
+    "lucrum": ("humanus", "fames"),
+    "luxuria": ("corpus", "fames"),
+    "invidia": ("sensus", "fames"),
+    "venenum": ("aqua", "perditio"),
+    "corpus": ("mortuus", "bestia"),
+    "magneto": ("metallum", "iter"),
+    "tabernus": ("tutamen", "iter"),
+    "metallum": ("terra", "vitreus"),
+    "auram": ("praecantatio", "aer"),
+    "exanimis": ("motus", "mortuus"),
+    "perfodio": ("humanus", "terra"),
+    "mortuus": ("victus", "perditio"),
+    "spiritus": ("victus", "mortuus"),
+    "cognitio": ("ignis", "spiritus"),
+    "humanus": ("bestia", "cognitio"),
+    "vinculum": ("motus", "perditio"),
+    "superbia": ("volatus", "vacuos"),
+    "caelum": ("vitreus", "metallum"),
+    "permutatio": ("perditio", "ordo"),
+    "meto": ("messis", "instrumentum"),
+    "telum": ("instrumentum", "ignis"),
+    "instrumentum": ("humanus", "ordo"),
+    "electrum": ("potentia", "machina"),
+    "desidia": ("vinculum", "spiritus"),
+    "tutamen": ("instrumentum", "terra"),
+    "pannus": ("instrumentum", "bestia"),
+    "machina": ("motus", "instrumentum"),
+    "infernus": ("ignis", "praecantatio"),
+    "praecantatio": ("vacuos", "potentia"),
+    "vitium": ("praecantatio", "perditio"),
+    "fabrico": ("humanus", "instrumentum"),
+    "tenebrae": ("vacuos", "lux"),
+    # ... and more custom aspects
+}
+```
+</Accordion>
+
+## Cost Calculation
+
+Each aspect has a **cost** representing how "expensive" it is to use in research. The cost is computed iteratively from the primal aspects:
+
+```python
+# Initialize primal aspects with cost 1
+aspect_costs = {}
+for aspect, parents in aspect_parents.items():
+    if parents == (None, None):
+        aspect_costs[aspect] = 1
+
+# Remaining aspects to calculate
+remaining_aspects = set(aspect_parents.keys()) - set(aspect_costs.keys())
+
+# Iteratively compute costs: aspect cost = sum of parent costs
+while remaining_aspects:
+    progress = False
+    for aspect in list(remaining_aspects):
+        parents = aspect_parents[aspect]
+        # Can we calculate this aspect's cost?
+        if all(parent in aspect_costs for parent in parents if parent is not None):
+            total_cost = sum(
+                aspect_costs[parent] for parent in parents if parent is not None
+            )
+            aspect_costs[aspect] = total_cost
+            remaining_aspects.remove(aspect)
+            progress = True
+    
+    if not progress:
+        # Cycle detected or missing parent
+        break
+```
+
+**Example cost calculations:**
+
+```python
+aspect_costs = {
+    # Primals (cost 1)
+    "aer": 1,
+    "terra": 1,
+    "ignis": 1,
+    
+    # Tier 1 (cost 2)
+    "lux": 2,      # aer (1) + ignis (1)
+    "motus": 2,    # aer (1) + ordo (1)
+    "victus": 2,   # aqua (1) + terra (1)
+    
+    # Tier 2 (cost 3-4)
+    "herba": 3,    # victus (2) + terra (1)
+    "bestia": 4,   # motus (2) + victus (2)
+    
+    # Deep compounds (cost 5+)
+    "humanus": 9,  # bestia (4) + cognitio (5)
+    "instrumentum": 11,  # humanus (9) + ordo (1) + ordo (1)
+}
+```
+
+<Note>
+  The solver minimizes total cost when finding solutions. Using cheaper aspects leads to better (optimal) solutions.
+</Note>
+
+### Cost Overrides
+
+You can override aspect costs in the config to reflect custom mod configurations:
+
+```python
+aspect_costs = {k.lower(): v for k, v in get_global_config().aspect_cost_overrides.items()}
+```
+
+## Aspect Graph
+
+The bot builds an **undirected graph** where edges connect aspects that can transform into each other:
+
+```python
+from collections import defaultdict
+aspect_graph: defaultdict[str, List[str]] = defaultdict(list)
+
+# Add bidirectional edges between aspects and their parents
+for aspect, parents in aspect_parents.items():
+    for parent in parents:
+        if parent is not None:
+            if aspect not in aspect_graph[parent]:
+                aspect_graph[parent].append(aspect)
+            if parent not in aspect_graph[aspect]:
+                aspect_graph[aspect].append(parent)
+
+# Sort neighbors by cost (cheapest first) for better pathfinding heuristics
+for aspect in aspect_graph.values():
+    aspect.sort(key=lambda a: aspect_costs[a])
+```
+
+**Example graph fragment:**
+
+```
+aer (cost 1) -> [motus (2), lux (2), vacuos (2), tempestas (2), ...]
+terra (cost 1) -> [victus (2), vitreus (2), metallum (3), ...]
+victus (cost 2) -> [aqua (1), terra (1), herba (3), limus (3), ...]
+```
+
+## Aspect Pathfinding
+
+The core pathfinding function finds the **cheapest paths** from one aspect to another with a specific length:
+
+### Algorithm: Dynamic Programming with Backtracking
+
+```python
+@lru_cache(maxsize=1000)
+def _find_cheapest_element_paths_many(start: str, ends_list: Tuple[str, ...], n_list: Tuple[int, ...]):
+    max_n = max(n_list)
+    
+    # Track minimum cost to reach each aspect at each step
+    # step -> {aspect: min_cost}
+    min_costs: list[dict[str, int]] = [{} for _ in range(max_n)]
+    
+    # Track which predecessors achieve that minimum cost
+    # step -> {aspect: [predecessors]}
+    predecessors: list[dict[str, List[str]]] = [{} for _ in range(max_n)]
+    
+    # Initialize: starting aspect at step 0
+    min_costs[0][start] = aspect_costs[start]
+    
+    # Forward pass: compute min costs
+    previous_step_aspects = [start]
+    for step in range(max_n - 1):
+        for aspect in previous_step_aspects:
+            curr_cost = min_costs[step][aspect]
+            
+            # Try all neighboring aspects
+            for neighbor in aspect_graph[aspect]:
+                new_cost = curr_cost + aspect_costs[neighbor]
+                next_step = step + 1
+                
+                if neighbor not in min_costs[next_step] or new_cost < min_costs[next_step][neighbor]:
+                    # Found cheaper path
+                    min_costs[next_step][neighbor] = new_cost
+                    predecessors[next_step][neighbor] = [aspect]
+                elif new_cost == min_costs[next_step][neighbor]:
+                    # Found equally cheap alternative path
+                    predecessors[next_step][neighbor].append(aspect)
+        
+        previous_step_aspects = list(min_costs[step+1].keys())
+    
+    # Backward pass: reconstruct all minimum-cost paths
+    paths_many: List[List[List[str]]] = [[] for _ in ends_list]
+    
+    for idx, (end, target_length) in enumerate(zip(ends_list, n_list)):
+        if target_length <= 0:
+            continue
+        if target_length == 1:
+            if end == start:
+                paths_many[idx].append([start])
+            continue
+        
+        target_step_index = target_length - 1
+        if target_step_index >= max_n or end not in min_costs[target_step_index]:
+            continue  # Not reachable
+        
+        # Recursive path reconstruction
+        def reconstruct_path(current: str, step_idx: int, current_path: List[str]):
+            if step_idx == 0:
+                paths_many[idx].append(current_path)
+                return
+            for prev in predecessors[step_idx][current]:
+                reconstruct_path(prev, step_idx - 1, [prev] + current_path)
+        
+        reconstruct_path(end, target_step_index, [end])
+    
+    return paths_many
+```
+
+### Example: Finding Paths
+
+```python
+# Find all cheapest paths from "terra" to "herba" of length 2
+paths = find_cheapest_element_paths_many("terra", ["herba"], [2])
+# Returns: [ [["terra", "victus", "herba"]] ]
+#   Cost: 1 + 2 + 3 = 6
+
+# Find paths to multiple destinations with different lengths
+paths = find_cheapest_element_paths_many(
+    "aer", 
+    ["lux", "motus", "bestia"], 
+    [2, 2, 3]
+)
+# Returns:
+# [
+#   [["aer", "ignis", "lux"]],           # Length 2 to lux
+#   [["aer", "ordo", "motus"]],          # Length 2 to motus  
+#   [["aer", "ordo", "motus", "victus", "bestia"]]  # Length 3 to bestia (one of many)
+# ]
+```
+
+<Tip>
+  The function returns **all** paths that tie for minimum cost. This gives the solver multiple options to try when one path doesn't work spatially on the board.
+</Tip>
+
+## Integration with Board Pathfinding
+
+The solver combines aspect pathfinding with spatial board pathfinding:
+
+```python
+def pathfind_both_lengths_to_many(self, start: Coordinate, ends: List[Coordinate], lengths: List[int]):
+    # Get aspect names from grid coordinates
+    end_aspects = [self.get_value(end) for end in ends]
+    
+    # Find cheapest aspect transformation paths
+    element_paths = find_cheapest_element_paths_many(
+        self.get_value(start), 
+        end_aspects, 
+        lengths
+    )
+    
+    # Find valid board paths of the same lengths
+    board_paths = self.pathfind_board_lengths_to_many(start, ends, lengths)
+    
+    # Combine: only keep (element_path, board_path) pairs with matching lengths
+    valid_combinations = []
+    for i in range(len(lengths)):
+        combinations = itertools.product(element_paths[i], board_paths[i])
+        valid_combinations.extend(combinations)
+    
+    return valid_combinations
+```
+
+Each returned tuple `(element_path, board_path)` represents a valid move where:
+- `element_path` transforms aspects according to Thaumcraft rules
+- `board_path` is spatially possible on the hexagonal grid
+
+## Custom Aspects and Disabled Aspects
+
+The bot supports custom aspects from mods:
+
+```python
+# Custom aspects in the hierarchy
+aspect_parents = {
+    "astrum": ("lux", "primordium"),     # Astrum from Thaumic Bases
+    "primordium": ("vacuos", "motus"),   # Primordium from Thaumic Bases
+    "aequalitas": ("cognitio", "ordo"),  # Aequalitas from Automagy
+    "vesania": ("cognitio", "vitium"),   # Vesania from Thaumic Tinkerer
+    # ...
+}
+
+# Disable aspects via config
+for disabled_aspect in get_global_config().disabled_aspects:
+    if disabled_aspect.lower() in aspect_parents:
+        del aspect_parents[disabled_aspect]
+```
+
+## Performance Optimizations
+
+| Technique | Benefit |
+|-----------|--------|
+| LRU caching | Aspect paths computed once and reused |
+| Neighbor sorting | Explores cheaper aspects first |
+| Dynamic programming | O(n × m) instead of exponential DFS |
+| Cost-based pruning | Solver skips expensive aspect paths |
+
+<Info>
+  The `@lru_cache(maxsize=1000)` decorator on pathfinding functions means the bot only computes each unique (start, ends, lengths) combination once. Subsequent calls return cached results instantly.
+</Info>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Solver Algorithm" icon="microchip" href="/concepts/solver-algorithm">
+    See how aspect paths are used in the solver
+  </Card>
+  <Card title="How It Works" icon="diagram-project" href="/concepts/how-it-works">
+    Understand the full pipeline
+  </Card>
+</CardGroup>

@@ -1,0 +1,351 @@
+---
+title: Testing & Debug Mode
+description: Use test modes for development, debugging, and benchmarking without interacting with the game
+---
+
+The Research Bot includes special testing modes that allow you to develop, debug, and benchmark the solver without requiring the game to be running.
+
+## Available Modes
+
+The bot supports three execution modes controlled by command-line arguments:
+
+| Mode | Command | Description |
+|------|---------|-------------|
+| **Normal** | `uv run main` | Standard operation with game interaction |
+| **Test** | `uv run main test` | Process a single debug image without mouse control |
+| **Test All** | `uv run main test_all` | Benchmark all saved test inputs |
+
+From `src/__main__.py:28-30`:
+
+```python
+MODE = sys.argv[1] if len(sys.argv) > 1 else None
+TEST_MODE = MODE == "test"  # Read debug_input and dont perform actions
+TEST_ALL_MODE = MODE == "test_all"  # Run test for all collected test_inputs
+```
+
+## Test Mode
+
+### Usage
+
+Test mode processes a single image without any game interaction:
+
+<CodeGroup>
+```bash Windows (PowerShell)
+uv run main test
+```
+
+```bash Windows (CMD)
+uv run main test
+```
+
+```bash macOS/Linux
+uv run main test
+```
+</CodeGroup>
+
+### How It Works
+
+1. **Reads** `debug_input.png` from the project directory
+2. **Analyzes** the research board and inventory aspects
+3. **Generates** a solution for the puzzle
+4. **Saves** debug visualization to `debug_render.png`
+5. **Exits** without performing any mouse actions
+
+From `src/__main__.py:161-180`:
+
+```python
+def setup_image(test_mode=True, skip_focus=False):
+    if test_mode:
+        image = PIL.Image.open("debug_input.png")
+        window_base_coords = (0, 0)
+    else:
+        window = find_game(get_global_config().game_window_title)
+        # ... normal screenshot logic ...
+```
+
+### When to Use Test Mode
+
+- **Debugging board parsing** - See how the bot interprets a specific board
+- **Testing configuration** - Verify custom aspect costs work as expected
+- **Developing features** - Work on solver improvements without game setup
+- **Reproducing bugs** - Share `debug_input.png` with issue reports
+
+### Output Files
+
+<AccordionGroup>
+<Accordion title="debug_render.png">
+Visualization showing:
+- Detected hexagon positions
+- Parsed aspect names
+- Solution paths with colors
+- Placement hints for each step
+</Accordion>
+
+<Accordion title="Console output">
+```
+MODE= test
+Aspects in inventory: [...]
+Aspects on board: [...]
+Starting solve computation
+Time taken to compute solution: 0.123 seconds
+Total solution cost: 42
+```
+</Accordion>
+</AccordionGroup>
+
+<Tip>
+Normal mode automatically saves each screenshot as `debug_input.png`, making it easy to switch to test mode for debugging specific boards.
+</Tip>
+
+## Test All Mode
+
+### Usage
+
+Test all mode runs benchmarks on all saved test cases:
+
+<CodeGroup>
+```bash Windows (PowerShell)
+uv run main test_all
+```
+
+```bash Windows (CMD)
+uv run main test_all
+```
+
+```bash macOS/Linux
+uv run main test_all
+```
+</CodeGroup>
+
+### How It Works
+
+1. **Scans** the `test_inputs/` directory for all `board_*.png` files
+2. **Processes** each board image:
+   - Parse timing
+   - Solve timing
+   - Solution cost
+3. **Reports** results for each board
+4. **Displays** cache statistics at the end
+
+From `src/__main__.py:128-159`:
+
+```python
+def test_all_samples(config: Config):
+    test_files = list(Path("./test_inputs").glob("board_*.png"))
+    print(f"Found {len(test_files)} test samples to check")
+
+    for test_file in test_files:
+        print("Testing file", test_file)
+        image = PIL.Image.open(test_file)
+
+        try:
+            start_time = time.time()
+            pixels = image.load()
+            grid = generate_hexgrid_from_image(image, pixels)
+            end_time = time.time()
+        except Exception as e:
+            print("Failed to parse:", traceback.format_exc())
+            continue
+
+        parse_time_ms = (end_time - start_time) * 1000
+
+        try:
+            start_time = time.time()
+            solved = generate_solution_from_hexgrid(grid)
+            end_time = time.time()
+        except Exception as e:
+            print("Failed to solve:", traceback.format_exc())
+            continue
+
+        solve_time_ms = (end_time - start_time) * 1000
+        print(
+            f"Solved with score {solved.calculate_cost()} in {parse_time_ms:.2f}+{solve_time_ms:.2f}ms"
+        )
+```
+
+### Sample Output
+
+```
+MODE= test_all
+Found 15 test samples to check
+Testing file test_inputs/board_a3f5b1.png
+Solved with score 38 in 12.34+156.78ms
+Testing file test_inputs/board_c7d2e9.png
+Solved with score 45 in 15.67+203.45ms
+...
+CacheInfo find cheapest element paths hits=1234 misses=56 maxsize=1000 currsize=56
+CacheInfo calculate distance hits=5678 misses=123 maxsize=128 currsize=123
+CacheInfo get neighbors hits=9012 misses=234 maxsize=128 currsize=128
+```
+
+### When to Use Test All Mode
+
+- **Performance benchmarking** - Measure solver improvements
+- **Regression testing** - Ensure changes don't break existing boards
+- **Cache analysis** - Understand caching effectiveness
+- **Configuration testing** - See how cost changes affect all solutions
+
+### Building Test Cases
+
+The bot automatically saves test cases during normal operation:
+
+From `src/__main__.py:398-405`:
+
+```python
+def save_input_image(image: Image, grid: HexGrid):
+    board_hash = grid.hash_board()[:6]
+    log.info("Saving sample image, Board hash is %s", board_hash)
+    img_path = Path("./test_inputs/board_" + board_hash + ".png")
+    if not img_path.exists():
+        img_path.parent.mkdir(exist_ok=True)
+        image.save(str(img_path))
+```
+
+Each unique board gets saved once with a hash-based filename.
+
+<Note>
+Test inputs are automatically created in `test_inputs/board_HASH.png` format. The hash ensures duplicate boards aren't saved multiple times.
+</Note>
+
+## Debug Output
+
+### Logging Levels
+
+The bot uses different logging levels for debug information:
+
+```python
+log.debug("Detailed information for debugging")
+log.info("Important status messages")
+log.error("Problems that need attention")
+```
+
+### Key Debug Information
+
+<Tabs>
+<Tab title="Board Parsing">
+```python
+log.debug("Aspects on board: %s", board_aspects)
+log.debug("Empty spaces on board: %s", empty_hexagons)
+log.debug("Generated board column: %s", column)
+log.debug("Valid Y coords: %s", valid_y_coords)
+```
+</Tab>
+
+<Tab title="Inventory">
+```python
+log.info(f"Time taken to find inventory aspects: {end_time - start_time} seconds")
+log.debug("Aspects in inventory: %s", inventory_aspects)
+```
+</Tab>
+
+<Tab title="Solving">
+```python
+log.debug("Starting solve computation")
+log.info(f"Time taken to compute solution: {end_time - start_time} seconds")
+log.info("Total solution cost: %s", solved.calculate_cost())
+```
+</Tab>
+
+<Tab title="Errors">
+```python
+log.error(f"Missing aspect {aspect} from inventory (made from {parent_a} + {parent_b})")
+log.error(f"Duplicate coordinate {coord} found in solution!")
+```
+</Tab>
+</Tabs>
+
+## Benchmarking
+
+### Performance Metrics
+
+Test all mode provides detailed timing information:
+
+- **Parse time**: How long to extract the board from the image
+- **Solve time**: How long to compute the optimal solution
+- **Total time**: Parse + Solve
+
+### Cache Statistics
+
+At the end of each run, cache performance is displayed:
+
+```python
+print("CacheInfo find cheapest element paths", _find_cheapest_element_paths_many.cache_info())
+print("CacheInfo calculate distance", HexGrid.calculate_distance.cache_info())
+print("CacheInfo get neighbors", HexGrid.get_neighbors.cache_info())
+```
+
+From `src/__main__.py:41-43`.
+
+### Interpreting Results
+
+- **High hit rate** (&gt;90%): Good caching, performance optimized
+- **Low hit rate** (&lt;50%): Consider increasing cache size
+- **Parse time spikes**: Image recognition issues
+- **Solve time spikes**: Complex boards with many starting aspects
+
+<Tip>
+Run test all mode before and after making changes to measure performance impact. Look for regressions in solve time or cache effectiveness.
+</Tip>
+
+## Creating Test Cases
+
+### Manual Test Case Creation
+
+1. **Run the bot** in normal mode
+2. **Solve a board** - it saves to `test_inputs/`
+3. **Run test mode** to verify: `uv run main test`
+4. **Copy** `debug_input.png` to `test_inputs/board_custom.png` if needed
+
+### Automated Collection
+
+Just use the bot normally! Every unique board is automatically saved:
+
+```python
+# Automatic saving happens in normal mode
+if not img_path.exists():
+    img_path.parent.mkdir(exist_ok=True)
+    image.save(str(img_path))
+```
+
+### Test Case Organization
+
+```
+project/
+├── debug_input.png          # Latest screenshot (overwritten each run)
+├── debug_render.png         # Latest solution visualization
+└── test_inputs/
+    ├── board_a3f5b1.png    # Auto-saved test case 1
+    ├── board_c7d2e9.png    # Auto-saved test case 2
+    └── board_f8a1c3.png    # Auto-saved test case 3
+```
+
+## Troubleshooting
+
+### Test Mode Issues
+
+**Problem**: `FileNotFoundError: debug_input.png`
+
+**Solution**: Run normal mode at least once to create the file, or copy an image from `test_inputs/`
+
+---
+
+**Problem**: Test mode shows different results than normal mode
+
+**Solution**: Verify `debug_input.png` is from the current game state. Normal mode overwrites it each run.
+
+### Test All Mode Issues
+
+**Problem**: No test files found
+
+**Solution**: Create the `test_inputs/` directory and run normal mode to populate it:
+
+```bash
+mkdir test_inputs
+uv run main
+```
+
+---
+
+**Problem**: Some boards fail to parse or solve
+
+**Solution**: These are legitimate bugs! Check the error messages and report with the failing board image.

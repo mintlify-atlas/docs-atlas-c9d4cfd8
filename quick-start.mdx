@@ -1,0 +1,223 @@
+---
+title: Quick start
+description: Step-by-step guide to solving your first Thaumcraft 4 research puzzle
+---
+
+# Quick start
+
+Solve your first research puzzle in minutes.
+
+## Prepare the game
+
+<Steps>
+  <Step title="Install and activate the resource pack">
+    Make sure the custom resource pack is installed and active in your Minecraft settings.
+    
+    <Warning>
+    The bot cannot recognize puzzles without the required resource pack.
+    </Warning>
+  </Step>
+  
+  <Step title="Set up the research table">
+    1. Open a Research Table in-game
+    2. Place an unsolved Research Notes item in the table
+    3. Make sure **only** the initially given aspects are on the board
+    
+    <Note>
+    The puzzle board should be clean - no aspects placed except the starting ones provided by the research notes.
+    </Note>
+  </Step>
+  
+  <Step title="Position your game window">
+    - Ensure the game window is on your **main screen**
+    - The window should be large enough for clear recognition
+    - Hide any tooltips covering the puzzle board
+    - Consider hiding NEI if it overlaps (default GTNH keybind: `O`)
+  </Step>
+</Steps>
+
+## Run the bot
+
+<Steps>
+  <Step title="Open a terminal">
+    Navigate to the project folder and open a terminal:
+    
+    ```bash
+    cd path/to/thaumcraft4-research-bot
+    ```
+    
+    <Info>
+    You can use Windows Terminal, PowerShell, or Command Prompt.
+    </Info>
+  </Step>
+  
+  <Step title="Start the bot">
+    Run the main command:
+    
+    ```bash
+    uv run main
+    ```
+    
+    The bot will automatically:
+    1. Bring the game window to the foreground
+    2. Take a screenshot
+    3. Parse the puzzle board
+    4. Generate an optimal solution
+    5. Place aspects using mouse control
+  </Step>
+  
+  <Step title="Watch the magic happen">
+    The bot will log its progress:
+    
+    ```
+    MODE= None
+    Saving sample image, Board hash is a3f5c2
+    Starting solve computation
+    Time taken to compute solution: 0.342 seconds
+    Total solution cost: 12
+    ```
+    
+    <Note>
+    The mouse will move automatically to place aspects. Don't move your mouse during this process.
+    </Note>
+  </Step>
+</Steps>
+
+## Emergency stop
+
+<Warning>
+If the mouse control goes wrong, **smash your mouse into the top-left corner** of the screen for an emergency stop.
+</Warning>
+
+## Process next board
+
+After the bot finishes placing aspects:
+
+<Steps>
+  <Step title="Complete the research">
+    The puzzle should now be solved. Complete the research in-game if needed.
+  </Step>
+  
+  <Step title="Load next puzzle">
+    1. Put in the next unsolved Research Notes
+    2. Press **Enter** in the terminal to solve the next board
+    3. Or press `r` to retry placing aspects for the current solution
+  </Step>
+</Steps>
+
+## Using test mode
+
+Test the bot without performing any mouse actions:
+
+```bash
+uv run main test
+```
+
+This mode:
+- Reads from `debug_input.png` instead of taking a screenshot
+- Parses and solves the puzzle
+- Skips all mouse clicks and window actions
+- Saves the solution render to `debug_render.png`
+
+<Info>
+Test mode is useful for verifying puzzle recognition and solver performance without affecting your game.
+</Info>
+
+## Configuration
+
+Create a `config.toml` file in the project root to customize behavior:
+
+```toml
+# Thaumcraft 4 Research Bot Configuration
+
+[general]
+# Title (or beginning of title) of the game window
+game-window-title = "GT: New Horizons"
+
+# Global hotkey to process the next board
+next-board-hotkey = "ctrl+r"
+
+# Disable aspects (pretend they don't exist)
+disabled-aspects = []
+
+[aspect-costs]
+# Override default aspect costs
+# Lower costs are preferred by the solver
+# Example: if you have lots of instrumentum
+instrumentum = 1
+```
+
+<Note>
+The config file is automatically created with defaults on first run if it doesn't exist.
+</Note>
+
+## Understanding aspect costs
+
+The solver minimizes total aspect cost when generating solutions:
+
+- **Primal aspects** (aer, aqua, terra, ignis, ordo, perditio) cost **1** by default
+- **Compound aspects** cost the sum of their components
+  - `victus` = aqua + terra = **2**
+  - `herba` = terra + victus = **3**
+  - `instrumentum` = humanus + ordo = **higher cost**
+
+Customize costs in `config.toml` to reflect your actual inventory:
+
+```toml
+[aspect-costs]
+# If you have abundant instrumentum, make it cheaper
+instrumentum = 1
+```
+
+## Advanced: Test all mode
+
+Benchmark the solver on multiple puzzles:
+
+```bash
+uv run main test_all
+```
+
+This runs the solver on all images in the `test_inputs/` folder and reports:
+- Parse time
+- Solve time  
+- Solution cost
+
+Useful for validating that all board types can be solved.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Bot can't find the game window">
+    Update the `game-window-title` in `config.toml` to match your actual window title.
+  </Accordion>
+  
+  <Accordion title="Puzzle recognition fails">
+    - Verify the custom resource pack is active
+    - Ensure the game window is fully visible on the main screen
+    - Check that no tooltips are covering the puzzle board
+    - Make sure the window is large enough
+  </Accordion>
+  
+  <Accordion title="Solver takes too long">
+    Large boards with 7+ starting aspects can take longer. Consider:
+    - Using test mode to pre-validate the puzzle
+    - Waiting patiently (it will complete)
+    - Checking if there are any disabled aspects that could simplify the solution
+  </Accordion>
+  
+  <Accordion title="Mouse control is too fast/slow">
+    Currently there's no built-in speed control. The default speed is tested to work consistently on most systems.
+  </Accordion>
+</AccordionGroup>
+
+## Next steps
+
+You're ready to automate all your Thaumcraft research! The bot will:
+
+- Save screenshots of each puzzle to `test_inputs/` for debugging
+- Generate debug renders showing the solution path
+- Remember you can press `r` to retry or Enter to continue
+
+<Card title="Report issues" icon="github" href="https://github.com/leumasme/thaumcraft4-research-bot">
+  Found a bug? Include the generated `debug_input.png` when reporting issues on GitHub.
+</Card>
