@@ -1,0 +1,69 @@
+{
+  "projectType": "cli-tool",
+  "projectName": "Thaumcraft 4 Research Bot",
+  "projectDescription": "Screenshot-based automation bot for the Thaumcraft 4 research minigame in Minecraft 1.7.10",
+  "theme": "aspen",
+  "primaryColor": "#9B59B6",
+  "lightColor": "#BB8FCE",
+  "darkColor": "#6C3483",
+  "navigation": {
+    "groups": [
+      {
+        "group": "Get Started",
+        "pages": ["introduction", "installation", "quick-start"]
+      },
+      {
+        "group": "Guides",
+        "pages": [
+          "guides/usage",
+          "guides/configuration",
+          "guides/troubleshooting"
+        ]
+      },
+      {
+        "group": "Core Concepts",
+        "pages": [
+          "concepts/how-it-works",
+          "concepts/puzzle-recognition",
+          "concepts/solver-algorithm",
+          "concepts/aspect-system"
+        ]
+      },
+      {
+        "group": "Advanced",
+        "pages": [
+          "advanced/custom-aspect-costs",
+          "advanced/testing-mode",
+          "advanced/building"
+        ]
+      },
+      {
+        "group": "Reference",
+        "pages": [
+          "reference/api-overview",
+          "reference/modules",
+          "reference/faq"
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Pixel-based puzzle recognition with custom resource pack support",
+    "Fast universal puzzle solver optimized for GTNH modpack",
+    "Automatic mouse control for placing aspects and crafting",
+    "Configurable aspect cost optimization",
+    "Test modes for benchmarking and validation"
+  ],
+  "publicApiSurface": [
+    "main - Entry point for running the bot",
+    "test - Test mode using debug_input.png",
+    "test_all - Batch test mode for all test_inputs",
+    "HexGrid - Hexagonal grid representation",
+    "SolvingHexGrid - Grid with pathfinding and solution tracking",
+    "RingSolver - Core puzzle solving algorithm",
+    "aspect_parents - Aspect composition mapping",
+    "aspect_costs - Cost calculation for aspects",
+    "find_cheapest_element_paths_many - Pathfinding for aspect combinations",
+    "Config - Configuration management"
+  ]
+}
